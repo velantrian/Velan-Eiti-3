@@ -7931,7 +7931,12 @@
                 deferredPrompt.prompt();
                 deferredPrompt.userChoice.then((choice) => {
                     if (choice.outcome === 'accepted') {
+                        localStorage.setItem('eiti_pwa_installed', '1');
                         showToast('✅ EITI установлено!');
+                    } else {
+                        // Пользователь отклонил — скрываем кнопку чтобы не мешала
+                        var _btnD = document.getElementById('btn-pwa-install');
+                        if (_btnD) _btnD.style.display = 'none';
                     }
                     deferredPrompt = null;
                 });
@@ -7948,9 +7953,19 @@
             }
         }
         
+        // v12.9.43: Пользователь подтвердил установку (для iOS/ручных инструкций)
+        function eitiMarkAsInstalled() {
+            localStorage.setItem('eiti_pwa_installed', '1');
+            var b = document.getElementById('pwa-install-banner');
+            if (b) b.remove();
+            var btn = document.getElementById('btn-pwa-install');
+            if (btn) btn.style.display = 'none';
+            showToast('✅ EITI добавлено на главный экран!');
+        }
+
         // ════════════════════════════════════════════════
 
-        
+
         // ════════════════════════════════════════════════
         // EITI PROFILE — О себе (Hyperia CoreMemoryBlocks)
         // ════════════════════════════════════════════════
@@ -9982,6 +9997,18 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                             }
                         }
                     } catch(e) {}
+                    // v12.9.43: EITI Memory (личная память) — передаём Grok Voice
+                    try {
+                        var _gMem = (typeof _memCache !== 'undefined' && _memCache) ? _memCache : [];
+                        if (_gMem.length > 0) {
+                            _grokChatHistory += '\n\n=== ЛИЧНАЯ ПАМЯТЬ (EITI Memory) ===\n';
+                            _gMem.slice(0, 40).forEach(function(e) {
+                                _grokChatHistory += '[' + (e.tag||'general') + '] ' + e.text + '\n';
+                            });
+                            if (_gMem.length > 40) _grokChatHistory += '[...ещё ' + (_gMem.length - 40) + ' записей]\n';
+                            _grokChatHistory += '=== КОНЕЦ ЛИЧНОЙ ПАМЯТИ ===';
+                        }
+                    } catch(e) {}
                     try {
                         var _histMsgs = (window.chatLog || []).slice(-40);
                         if (_histMsgs.length > 0) {
@@ -10083,7 +10110,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                                 'СТИЛЬ: голосовой — отвечай разговорно, без markdown. Числа и URL проговаривай словами.',
                                 'ЯЗЫК: по умолчанию русский. Переключайся на язык пользователя если он сменил язык.',
                                 'РАССУЖДЕНИЕ: модель think-fast — думай в фоне, отвечай без пауз. При сложных вопросах рассуждай вслух кратко.',
-                                'ЗАПИСЬ: KB_ADD, NOTE_WRITE и другие команды записи — передавай через DeepSeek-чат, сам не пиши в базу.',
+                                'ЗАПИСЬ В ЛИЧНУЮ ПАМЯТЬ: Когда пользователь просит запомнить что-то личное — ОБЯЗАТЕЛЬНО добавляй тег [MEM_ADD:tag|текст] в свой ответ (tag: note/task/idea/general). Для обновления — [MEM_UPDATE:tag|новый текст]. Для удаления — [MEM_DEL:tag|фрагмент текста]. Теги обрабатываются автоматически. Прочие команды (KB_ADD, NOTE_WRITE) передавай через DeepSeek.',
                                 _gSHint,
                                 _grokSelfInfo,
                                 _grokChatHistory
@@ -22882,6 +22909,7 @@ window.eitiLLMClearAll = async function() {
             eitiShowInstallBanner(null);
         });
         window.addEventListener('appinstalled', function() {
+            localStorage.setItem('eiti_pwa_installed', '1');
             var b = document.getElementById('pwa-install-banner');
             if (b) b.remove();
             // Скрываем иконку после установки
@@ -22901,8 +22929,10 @@ window.eitiLLMClearAll = async function() {
             banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(135deg,#2b1e16,#5a4632);color:#ffd700;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,0.5);gap:8px;';
             var closeBtn = '<button onclick="document.getElementById(\'pwa-install-banner\').remove()" style="padding:6px 10px;border-radius:8px;border:none;background:rgba(255,255,255,0.15);color:#fff;cursor:pointer;font-size:13px;flex-shrink:0;">✕</button>';
             if (customMsg) {
-                // Ручная инструкция для браузеров без beforeinstallprompt
-                banner.innerHTML = '<span style="flex:1;font-size:12px;line-height:1.4;">📲 ' + customMsg + '</span>' + closeBtn;
+                // Ручная инструкция для браузеров без beforeinstallprompt (iOS Safari, Firefox, Samsung, Opera)
+                // Кнопка «✅ Готово» позволяет скрыть кнопку установки после ручного добавления на экран
+                var doneBtn = '<button onclick="eitiMarkAsInstalled()" style="padding:6px 12px;border-radius:8px;border:none;background:#4ad700;color:#000;font-weight:700;cursor:pointer;font-size:12px;flex-shrink:0;white-space:nowrap;">✅ Готово</button>';
+                banner.innerHTML = '<span style="flex:1;font-size:12px;line-height:1.4;">📲 ' + customMsg + '</span>' + doneBtn + closeBtn;
             } else {
                 // Chrome/Edge — нативная установка
                 banner.innerHTML = '<span style="flex:1;">📲 Установить EITI как приложение</span><button onclick="installPWA()" style="padding:6px 14px;border-radius:8px;border:none;background:#ffd700;color:#000;font-weight:700;cursor:pointer;font-size:13px;flex-shrink:0;">Установить</button>' + closeBtn;
@@ -22910,8 +22940,10 @@ window.eitiLLMClearAll = async function() {
             document.body.appendChild(banner);
         }
         (function() {
-            // Не показываем если уже установлено (standalone mode)
+            // Не показываем если уже установлено
             if (window.matchMedia('(display-mode: standalone)').matches) return;
+            if (navigator.standalone === true) return; // iOS Safari: приложение открыто с экрана
+            if (localStorage.getItem('eiti_pwa_installed') === '1') return; // Уже установлено ранее
             // FIX v12.9.38: убран sessionStorage-guard — он блокировал кнопку после первого показа
             // v12.9.34: показываем кнопку установки всегда (для local file тоже)
             setTimeout(function() {
