@@ -10868,6 +10868,108 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
             }
         }
 
+        // ── v12.9.43 UNIVERSAL CONTEXT GATE ─────────────────────────────────────────
+        // Abstracts the FTS5/IDB archive scan so ALL providers (DeepSeek, OpenRouter,
+        // Gemini) receive the same enriched history. Prevents accumulation across turns
+        // by stripping any previous [АРХИВНЫЙ КОНТЕКСТ] block before re-injecting.
+        function eitiPrepareContext(query, baseHistory, callback) {
+            var _SENTINEL = '\n[АРХИВНЫЙ КОНТЕКСТ]: ';
+            // Strip previous archive injection to prevent infinite accumulation
+            var _baseContent = baseHistory[0].content;
+            var _sepIdx = _baseContent.indexOf(_SENTINEL);
+            if (_sepIdx !== -1) _baseContent = _baseContent.slice(0, _sepIdx);
+
+            var _lower = query.toLowerCase();
+            var _stopWords = /^(привет|здравствуй|как дела|доброе утро|добрый день|добрый вечер|пока|спасибо)/.test(_lower.trim());
+            if (_stopWords || typeof _db === 'undefined' || !_db || !eitiDb) {
+                baseHistory[0].content = _baseContent;
+                callback(baseHistory);
+                return;
+            }
+
+            var _archiveQuery = query
+                .replace(/посмотри (историю|полностью|в прошлом)|просмотри историю|покажи историю/gi, '')
+                .replace(/помнишь|обсуждали|говорили|в прошлый раз|в прошлых чатах|прошлом чате|прошлый чат|что мы|предыдущ/gi, '')
+                .trim();
+            var _showLastChat = _archiveQuery.length < 3;
+            var CMD_SEARCH_ARCHIVE = /помнишь|обсуждали|говорили|в прошлый раз|в прошлых чатах|прошлом чате|прошлый чат|что мы|предыдущ|покажи историю|посмотри историю|просмотри историю/i.test(query);
+
+            function _inject(dump) {
+                baseHistory[0].content = _baseContent + _SENTINEL + dump;
+                callback(baseHistory);
+            }
+
+            eitiSearchArchive(_archiveQuery).then(function(ftsResults) {
+                if (ftsResults && ftsResults.length > 0) {
+                    var dump = '=== РЕЗУЛЬТАТЫ ПОИСКА ПО АРХИВУ (FTS5/L1-RAG) ===\n';
+                    dump += '[Реальные фрагменты из архива твоих диалогов. Основывайся ТОЛЬКО на них.]\n';
+                    ftsResults.forEach(function(r, i) {
+                        dump += '\n[Чат #' + (i+1) + ' (' + r.chatId + '): ' + r.snippets + ']';
+                    });
+                    dump += '\n=== КОНЕЦ ДАННЫХ АРХИВА ===';
+                    _inject(dump);
+                } else if (CMD_SEARCH_ARCHIVE) {
+                    // FTS5 empty + explicit history request → full IDB scan fallback
+                    eitiGetChats().then(function(chats) {
+                        return Promise.all(chats.slice(0, 100).map(function(ch) {
+                            return eitiGetMessages(ch.id).then(function(msgs) {
+                                return {t: ch.title, d: new Date(ch.updated).toLocaleDateString('ru'), n: ch.count, msgs: msgs};
+                            });
+                        }));
+                    }).then(function(all) {
+                        if (all.length === 0) {
+                            var _l2fb = (typeof window._l2Cache !== 'undefined' && window._l2Cache) ? window._l2Cache : [];
+                            if (_l2fb.length > 0) {
+                                var _l2dump = '=== ДАЙДЖЕСТЫ ПРОШЛЫХ СЕССИЙ (L2) ===\n';
+                                _l2fb.slice(0, 10).forEach(function(d, i) {
+                                    _l2dump += '\n[Сессия ' + (i+1) + ' · ' + (d.title||'без названия') + ']\n' + (d.digest||d.summary||'').slice(0, 400);
+                                });
+                                _l2dump += '\n=== КОНЕЦ L2 ===';
+                                _inject(_l2dump);
+                            } else {
+                                _inject('[История пуста. Это первые сессии пользователя. Не выдумывай прошлые разговоры.]');
+                            }
+                            return;
+                        }
+                        var kws = _archiveQuery.toLowerCase().split(/\s+/).filter(function(w){ return w.length > 3; });
+                        all.forEach(function(ch) {
+                            var txt = ch.t.toLowerCase() + ' ' + ch.msgs.map(function(m){ return (m.content||'').toLowerCase(); }).join(' ');
+                            ch._score = kws.length > 0
+                                ? kws.reduce(function(s,w){ return s + (txt.indexOf(w)!==-1?1:0); }, 0)
+                                : ch.n;
+                        });
+                        all.sort(function(a,b){ return b._score - a._score || b.n - a.n; });
+                        var dump, _pn2 = {deepseek:'DS',gemini:'GM',openrouter:'OR',grok:'Grok',openai:'OA'};
+                        if (_showLastChat) {
+                            var _lastCh = all[0];
+                            dump = '=== ПРЕДЫДУЩИЙ ЧАТ (последняя сессия) ===\n';
+                            dump += '[' + _lastCh.t + ' · ' + _lastCh.d + ' · ' + _lastCh.n + ' сообщений]\n';
+                            _lastCh.msgs.forEach(function(m) {
+                                var lbl = m.role==='user' ? 'Велантриец' : (_pn2[m.provider] || m.provider || 'AI');
+                                dump += '\n[' + lbl + ']: ' + (m.content||'').slice(0, 500);
+                            });
+                            if (all.length > 1) dump += '\n\n[Всего сессий в архиве: ' + all.length + '. Скажи "покажи историю" для просмотра всех.]';
+                            dump += '\n=== КОНЕЦ ПРЕДЫДУЩЕГО ЧАТА ===';
+                        } else {
+                            dump = '=== ИСТОРИЯ ЧАТОВ ===\n';
+                            dump += 'Найдено ' + all.length + ' сессий. Топ по релевантности:\n';
+                            all.slice(0, 20).forEach(function(ch) {
+                                dump += '\n[' + ch.t + ' · ' + ch.d + ' · ' + ch.n + ' сообщ.]';
+                                ch.msgs.slice(0, 6).forEach(function(m) {
+                                    var lbl = m.role==='user' ? 'Велантриец' : (_pn2[m.provider] || m.provider || 'AI');
+                                    dump += '\n  [' + lbl + ']: ' + (m.content||'').slice(0, 250);
+                                });
+                            });
+                            dump += '\n=== КОНЕЦ ИСТОРИИ ===';
+                        }
+                        _inject(dump);
+                    }).catch(function(){ callback(baseHistory); });
+                } else {
+                    callback(baseHistory);
+                }
+            }).catch(function(){ callback(baseHistory); });
+        }
+
         async function eitiAskDeepSeek(userText) {
             return new Promise(function(resolve, reject) {
                 var _provider = localStorage.getItem('eiti_ai_provider') || 'deepseek';
@@ -11450,12 +11552,8 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                     sysContent += '\n=== КОНЕЦ MOSC ===';
                 }
 
-                // ── ИСТОРИЯ ЧАТОВ: injected async (see doFetch/histScan below) ──
-                var _hadHistScan = !!ctx.histScanData; // v9.15fix: флаг до обнуления
-                if (ctx.histScanData) {
-                    sysContent += '\n\n' + ctx.histScanData;
-                    ctx.histScanData = null; // one-shot
-                }
+                // ── ИСТОРИЯ ЧАТОВ: injected via eitiPrepareContext (universal context gate) ──
+                var _hadHistScan = false; // set in eitiPrepareContext callback
 
                 // ── НЕДАВНИЕ СООБЩЕНИЯ (только 5, по 100 символов) ──────
                 if (chatLog && chatLog.length > 2) {
@@ -11643,7 +11741,11 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
 
                 // ── OpenRouter SSE path ─────────────────────────────
                 if (_provider === 'openrouter') {
-                    var _orModel = localStorage.getItem('eiti_or_model') || 'openrouter/auto';
+                    var _orRandomModels = ['anthropic/claude-3-haiku', 'google/gemini-pro-1.5', 'meta-llama/llama-3-70b', 'x-ai/grok-beta'];
+                    var _orModel = localStorage.getItem('eiti_or_model');
+                    if (!_orModel || _orModel === 'openrouter/auto') {
+                        _orModel = _orRandomModels[Math.floor(Math.random() * _orRandomModels.length)];
+                    }
                     fetch('https://openrouter.ai/api/v1/chat/completions', {
                         method: 'POST',
                         signal: _abortCtrl.signal,
@@ -11889,104 +11991,15 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                     } else { doFetch(); }
                 }
 
-                // ── v12.9.13 AUTO-RAG: FTS5 на каждый запрос + полный скан по истор.словам ──
-                // Авто-RAG: FTS5 всегда если _db готов и запрос не стоп-слово
-                // Полный IDB-скан: только при явных словах истории (CMD_SEARCH_ARCHIVE)
-                var _autoRagEnabled = !_archiveStopWords && typeof _db !== 'undefined' && _db;
-                if (_autoRagEnabled && eitiDb) {
-                    // Очищаем userText от служебных слов для лучшего поискового запроса
-                    var _archiveQuery = userText
-                        .replace(/посмотри (историю|полностью|в прошлом)|просмотри историю|покажи историю/gi, '')
-                        .replace(/помнишь|обсуждали|говорили|в прошлый раз|в прошлых чатах|прошлом чате|прошлый чат|что мы|предыдущ/gi, '')
-                        .trim();
-                    // Если запрос стал пустым — показываем последний чат
-                    var _showLastChat = _archiveQuery.length < 3;
-
-                    // Пробуем FTS5 сначала
-                    eitiSearchArchive(_archiveQuery).then(function(ftsResults) {
-                        if (ftsResults && ftsResults.length > 0) {
-                            // ✅ FTS5 нашёл результаты
-                            var dump = '=== РЕЗУЛЬТАТЫ ПОИСКА ПО АРХИВУ (FTS5/L1-RAG) ===\n';
-                            dump += '[Реальные фрагменты из архива твоих диалогов. Основывайся ТОЛЬКО на них.]\n';
-                            ftsResults.forEach(function(r, i) {
-                                dump += '\n[Чат #' + (i+1) + ' (' + r.chatId + '): ' + r.snippets + ']';
-                            });
-                            dump += '\n=== КОНЕЦ ДАННЫХ АРХИВА ===';
-                            ctx.histScanData = dump;
-                            startQuery();
-                        } else if (CMD_SEARCH_ARCHIVE) {
-                            // FTS5 пуст + явный запрос истории → IDB скан как fallback
-                            eitiGetChats().then(function(chats) {
-                                return Promise.all(chats.slice(0, 100).map(function(ch) {
-                                    return eitiGetMessages(ch.id).then(function(msgs) {
-                                        return {t: ch.title, num: ch.chatNum||'', d: new Date(ch.updated).toLocaleDateString('ru'), n: ch.count, msgs: msgs};
-                                    });
-                                }));
-                            }).then(function(all) {
-                                if (all.length === 0) {
-                                    // Архив пуст — показываем L2 дайджесты если есть
-                                    var _l2fb = (typeof window._l2Cache !== 'undefined' && window._l2Cache) ? window._l2Cache : [];
-                                    if (_l2fb.length > 0) {
-                                        var _l2dump = '=== ДАЙДЖЕСТЫ ПРОШЛЫХ СЕССИЙ (L2) ===\n';
-                                        _l2fb.slice(0, 10).forEach(function(d, i) {
-                                            _l2dump += '\n[Сессия ' + (i+1) + ' · ' + (d.title||'без названия') + ']\n' + (d.digest||d.summary||'').slice(0, 400);
-                                        });
-                                        _l2dump += '\n=== КОНЕЦ L2 ===';
-                                        ctx.histScanData = _l2dump;
-                                    } else {
-                                        ctx.histScanData = '[История пуста. Это первые сессии пользователя. Не выдумывай прошлые разговоры.]';
-                                    }
-                                    startQuery();
-                                    return;
-                                }
-                                var kws = _archiveQuery.toLowerCase().split(/\s+/).filter(function(w){ return w.length > 3; });
-                                all.forEach(function(ch) {
-                                    var txt = ch.t.toLowerCase() + ' ' + ch.msgs.map(function(m){ return (m.content||'').toLowerCase(); }).join(' ');
-                                    ch._score = kws.length > 0
-                                        ? kws.reduce(function(s,w){ return s + (txt.indexOf(w)!==-1?1:0); }, 0)
-                                        : ch.n;
-                                });
-                                all.sort(function(a,b){ return b._score - a._score || b.n - a.n; });
-
-                                var dump, _pn2 = {deepseek:'DS',gemini:'GM',openrouter:'OR',grok:'Grok',openai:'OA'};
-
-                                if (_showLastChat) {
-                                    // Пользователь спрашивает о прошлом чате в общем — показываем последний чат полностью
-                                    var _lastCh = all[0];
-                                    dump = '=== ПРЕДЫДУЩИЙ ЧАТ (последняя сессия) ===\n';
-                                    dump += '[' + _lastCh.t + ' · ' + _lastCh.d + ' · ' + _lastCh.n + ' сообщений]\n';
-                                    _lastCh.msgs.forEach(function(m) {
-                                        var lbl = m.role==='user' ? 'Велантриец' : (_pn2[m.provider] || m.provider || 'AI');
-                                        dump += '\n[' + lbl + ']: ' + (m.content||'').slice(0, 500);
-                                    });
-                                    if (all.length > 1) {
-                                        dump += '\n\n[Всего сессий в архиве: ' + all.length + '. Скажи "покажи историю" для просмотра всех.]';
-                                    }
-                                    dump += '\n=== КОНЕЦ ПРЕДЫДУЩЕГО ЧАТА ===';
-                                } else {
-                                    // Поиск по ключевым словам — показываем топ чаты
-                                    dump = '=== ИСТОРИЯ ЧАТОВ ===\n';
-                                    dump += 'Найдено ' + all.length + ' сессий. Топ по релевантности:\n';
-                                    all.slice(0, 20).forEach(function(ch) {
-                                        dump += '\n[' + ch.t + ' · ' + ch.d + ' · ' + ch.n + ' сообщ.]';
-                                        ch.msgs.slice(0, 6).forEach(function(m) {
-                                            var lbl = m.role==='user' ? 'Велантриец' : (_pn2[m.provider] || m.provider || 'AI');
-                                            dump += '\n  [' + lbl + ']: ' + (m.content||'').slice(0, 250);
-                                        });
-                                    });
-                                    dump += '\n=== КОНЕЦ ИСТОРИИ ===';
-                                }
-                                ctx.histScanData = dump;
-                                startQuery();
-                            }).catch(function(){ startQuery(); });
-                        } else {
-                            // FTS5 пуст и нет явного запроса истории — идём без архива
-                            startQuery();
-                        }
-                    }).catch(function(){ startQuery(); });
-                } else {
+                // ── v12.9.43 UNIVERSAL CONTEXT GATE ──────────────────
+                // Routes all providers through eitiPrepareContext so DeepSeek,
+                // OpenRouter, and Gemini all receive enriched archive context.
+                eitiPrepareContext(userText, history, function(ctxHistory) {
+                    history = ctxHistory;
+                    _hadHistScan = history[0].content.indexOf('\n[АРХИВНЫЙ КОНТЕКСТ]: ') !== -1;
+                    if (_hadHistScan) _lastCtxSources.push('🕑Ист');
                     startQuery();
-                }
+                });
             });
         }
 
