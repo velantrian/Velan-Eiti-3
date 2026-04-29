@@ -11913,6 +11913,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                             });
                             dump += '\n=== КОНЕЦ ДАННЫХ АРХИВА ===';
                             ctx.histScanData = dump;
+                            history[0].content += '\n\n' + dump;
                             startQuery();
                         } else if (CMD_SEARCH_ARCHIVE) {
                             // FTS5 пуст + явный запрос истории → IDB скан как fallback
@@ -11933,8 +11934,10 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                                         });
                                         _l2dump += '\n=== КОНЕЦ L2 ===';
                                         ctx.histScanData = _l2dump;
+                                        history[0].content += '\n\n' + _l2dump;
                                     } else {
                                         ctx.histScanData = '[История пуста. Это первые сессии пользователя. Не выдумывай прошлые разговоры.]';
+                                        history[0].content += '\n\n[История пуста. Это первые сессии пользователя. Не выдумывай прошлые разговоры.]';
                                     }
                                     startQuery();
                                     return;
@@ -11977,6 +11980,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                                     dump += '\n=== КОНЕЦ ИСТОРИИ ===';
                                 }
                                 ctx.histScanData = dump;
+                                history[0].content += '\n\n' + dump;
                                 startQuery();
                             }).catch(function(){ startQuery(); });
                         } else {
@@ -17140,10 +17144,8 @@ window.eitiLLMClearAll = async function() {
                 // Re-send to AI
                 var input = document.getElementById('input');
                 // FIX v12.9.38: не вставляем текст в поле — только отправляем, потом очищаем
-                // Trigger send
-                var _editHandled = eitiIntentRouter(newTxt);
-                if (!_editHandled) {
-                    (function(){
+                // Trigger send — bypass intent router/KB on edit, always go to AI
+                (function(){
                         var _offlineMode = localStorage.getItem('eiti_offline_mode') === '1';
                         var _isLocalQuery = (_offlineMode && newTxt.charAt(0) !== '!') || newTxt.charAt(0) === '?';
                         if (_isLocalQuery) { eitiLocalSearch(newTxt); }
@@ -17162,7 +17164,6 @@ window.eitiLLMClearAll = async function() {
                             }
                         }
                     })();
-                }
                 // Очищаем поле в любом случае
                 if (input) { input.value = ''; input.style.height = 'auto'; }
             };
