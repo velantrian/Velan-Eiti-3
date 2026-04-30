@@ -5084,7 +5084,7 @@
                 + '<div class="player-right"><div class="player-card" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">'
                 + '<div class="playlist-header"><span class="playlist-title">🎵 Плейлист</span>'
                 + '<label class="playlist-add-btn" title="Добавить музыку">+<input type="file" id="music" accept="audio/*" multiple style="display:none"></label></div>'
-                + '<div id="player-track-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:transparent!important;border:none!important;max-height:none!important;"></div>'
+                + '<div id="player-track-list" style="flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:transparent!important;border:none!important;max-height:none!important;"></div>'
                 + '</div></div>'
                 + '</div><audio id="audio"></audio></div>'
         };
@@ -7086,7 +7086,7 @@
 
                         // Wrapper clips the delete button until swipe reveals it
                         var wrapper = document.createElement('div');
-                        wrapper.style.cssText = 'position:relative;overflow:hidden;border-bottom:1px solid rgba(255,255,255,0.06);';
+                        wrapper.style.cssText = 'position:relative;overflow:hidden;width:100%;border-bottom:1px solid rgba(255,255,255,0.06);';
 
                         // Sliding container: row + delete button side by side
                         var swipeContent = document.createElement('div');
@@ -11893,11 +11893,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
 
                 // ── OpenRouter SSE path ─────────────────────────────
                 if (_provider === 'openrouter') {
-                    var _orRandomModels = ['anthropic/claude-3-haiku', 'google/gemini-2.0-flash', 'meta-llama/llama-3.3-70b-instruct', 'x-ai/grok-3-mini'];
-                    var _orModel = localStorage.getItem('eiti_or_model');
-                    if (!_orModel || _orModel === 'openrouter/auto') {
-                        _orModel = _orRandomModels[Math.floor(Math.random() * _orRandomModels.length)];
-                    }
+                    var _orModel = localStorage.getItem('eiti_or_model') || 'openrouter/auto';
                     fetch('https://openrouter.ai/api/v1/chat/completions', {
                         method: 'POST',
                         signal: _abortCtrl.signal,
