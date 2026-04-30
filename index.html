@@ -4744,10 +4744,8 @@
             var st = document.getElementById('gemini-key-status');
             if (st) { st.textContent = '⏳ Проверка...'; st.style.color = 'rgba(255,215,0,0.7)'; }
             try { localStorage.setItem('eiti_gemini_key', _obfKey(key)); } catch(e) {}
-            fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }] })
-            }).then(function(r) {
+            fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + key)
+            .then(function(r) {
                 if (r.ok) {
                     if (st) { st.textContent = '✅ Подключено'; st.style.color = '#4caf50'; }
                     showToast('✅ Gemini ключ подтверждён');
@@ -6758,6 +6756,20 @@
                     window.addEventListener('pagehide', function() {
                         if (eitiCurrentChatId) eitiL2Consolidate(eitiCurrentChatId);
                     });
+                    // Auto-consolidate existing chats with no L2 digest on startup
+                    setTimeout(function() {
+                        if (!window.eitiDb || typeof eitiGetChats !== 'function') return;
+                        eitiGetChats().then(function(chats) {
+                            var existingIds = _eitiL2Cache.map(function(d){ return d.chatId; });
+                            var toProcess = chats
+                                .filter(function(c) { return c.id !== eitiCurrentChatId && existingIds.indexOf(c.id) === -1; })
+                                .sort(function(a, b) { return new Date(b.updated || b.created || 0) - new Date(a.updated || a.created || 0); })
+                                .slice(0, 5);
+                            toProcess.forEach(function(chat, i) {
+                                setTimeout(function() { eitiL2Consolidate(chat.id); }, i * 10000);
+                            });
+                        });
+                    }, 8000);
                         })
                 .catch(function(e) {
                     console.error('[v8] Boot error, fallback mode:', e);
@@ -12290,7 +12302,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                 if (msgs.length < 3) return;
                 var _activeProvider = localStorage.getItem('eiti_ai_provider') || 'deepseek';
                 var _dsKey = _deobfKey(localStorage.getItem('deepseek_api_key') || '');
-                var _gmKey = _deobfKey(localStorage.getItem('gemini_api_key') || '');
+                var _gmKey = _deobfKey(localStorage.getItem('eiti_gemini_key') || '');
                 var _orKey = _deobfKey(localStorage.getItem('openrouter_api_key') || '');
                 // Use active provider first, then any available key
                 var _l2Provider = null, _l2Key = null;
