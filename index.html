@@ -11158,6 +11158,15 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                 // Extra push to ensure bubble is visible
                 setTimeout(function(){ messagesEl.scrollTop = messagesEl.scrollHeight; }, 50);
 
+                // Detect responses that are the system prompt echoed back by the model
+                function _isSysPromptLeak(text) {
+                    return text && (
+                        text.indexOf('=== VELANTRIM EITI') === 0 ||
+                        text.indexOf('Ты EITI —') === 0 ||
+                        text.indexOf('АРХИТЕКТУРА ПАМЯТИ (Hyperia') !== -1
+                    );
+                }
+
                 // Системный промпт: знания + профиль + файлы
                 // ✅ FIX: CoreMemoryBlocks (L3) — профиль ВСЕГДА в контексте
                 // v12.9.2: KV-CACHE OPTIMIZATION — статическая часть промпта стабильна
@@ -11786,8 +11795,10 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                     sysContent = _head + '\n\n[...фрагмент контекста пропущен для экономии токенов...]\n\n' + _tail;
                 }
 
+                // Filter out any corrupted assistant messages that contain system prompt content
+                var _safeL0 = eitiL0.filter(function(m) { return !_isSysPromptLeak(m.content); });
                 var history = [{role:'system', content: sysContent}]
-                    .concat(eitiL0.map(function(m){
+                    .concat(_safeL0.map(function(m){
                         return {role: m.role==='user'?'user':'assistant', content: m.content};
                     }));
                 history.push({role:'user', content: userText});
@@ -11812,15 +11823,15 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                     _gmHistory.forEach(function(m) {
                         _gmContents.push({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] });
                     });
-                    if (_sysMsg && _gmContents.length > 0 && _gmContents[0].role === 'user') {
-                        _gmContents[0].parts[0].text = _sysMsg + '\n\n' + _gmContents[0].parts[0].text;
-                    }
+                    // Use proper systemInstruction field (Gemini 1.5+) instead of prepending to user message
+                    var _gmBody = { contents: _gmContents, generationConfig: { maxOutputTokens: _maxTok } };
+                    if (_sysMsg) _gmBody.systemInstruction = { parts: [{ text: _sysMsg }] };
                     var _gmUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=' + _geminiKey;
                     fetch(_gmUrl, {
                         method: 'POST',
                         signal: _abortCtrl.signal,
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: _gmContents, generationConfig: { maxOutputTokens: _maxTok } })
+                        body: JSON.stringify(_gmBody)
                     }).then(function(r) {
                         clearTimeout(_abortTimer);
                         if (!r.ok) {
@@ -11838,6 +11849,11 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                         function readGemini() {
                             gReader.read().then(function(chunk) {
                                 if (chunk.done) {
+                                    if (_isSysPromptLeak(gResult)) {
+                                        var le2 = document.getElementById(liveId);
+                                        if (le2) { var t3 = le2.querySelector('[id$="-text"]'); if (t3) t3.innerHTML = '<span style="color:#f66">⚠️ Модель вернула системный промпт. Попробуй другую модель в Настройках.</span>'; }
+                                        reject(new Error('sys_prompt_leak')); return;
+                                    }
                                     var le = document.getElementById(liveId);
                                     if (le) {
                                         var t2 = le.querySelector('[id$="-text"]');
@@ -11918,6 +11934,10 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                         function readOR() {
                             return reader.read().then(function(chunk) {
                                 if (chunk.done) {
+                                    if (_isSysPromptLeak(result)) {
+                                        if (textEl) textEl.innerHTML = '<span style="color:#f66">⚠️ Модель вернула системный промпт. Попробуй другую модель в Настройках → OpenRouter.</span>';
+                                        window._eitiIsStreaming = false; reject(new Error('sys_prompt_leak')); return;
+                                    }
                                     if (textEl) textEl.innerHTML = eitiRenderMarkdown(result);
                                     var row = liveDiv.querySelector('.message-row');
                                     if (row) { var ctrl = document.createElement('div'); ctrl.className = 'message-controls'; var r2 = result; ctrl.innerHTML = '<button class="msg-btn tts-btn" title="Озвучить">🔊</button><button class="msg-btn" title="Копировать">📋</button>'; ctrl.querySelectorAll('.msg-btn')[0].onclick = function(){ toggleSpeech(liveId, r2); }; ctrl.querySelectorAll('.msg-btn')[1].onclick = function(){ copyText(r2).then(function(){ showToast('Скопировано'); }); }; row.appendChild(ctrl); }
@@ -12059,6 +12079,10 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                     function read() {
                         return reader.read().then(function(chunk) {
                             if (chunk.done) {
+                                if (_isSysPromptLeak(result)) {
+                                    if (textEl) textEl.innerHTML = '<span style="color:#f66">⚠️ Модель вернула системный промпт. Попробуй сменить провайдера в Настройках.</span>';
+                                    window._eitiIsStreaming = false; reject(new Error('sys_prompt_leak')); return;
+                                }
                                 if (textEl) textEl.innerHTML = eitiRenderMarkdown(result);
                                 scheduleScroll();
                                 // Добавляем кнопки управления
