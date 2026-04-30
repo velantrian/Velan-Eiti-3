@@ -7089,8 +7089,9 @@
                         wrapper.style.cssText = 'position:relative;overflow:hidden;width:100%;border-bottom:1px solid rgba(255,255,255,0.06);';
 
                         // Sliding container: row + delete button side by side
+                        // Width must be 100%+DELETE_W so row fills full wrapper and delete button overflows (clipped by wrapper overflow:hidden)
                         var swipeContent = document.createElement('div');
-                        swipeContent.style.cssText = 'display:flex;will-change:transform;transition:transform 0.2s ease;';
+                        swipeContent.style.cssText = 'display:flex;width:calc(100% + ' + DELETE_W + 'px);will-change:transform;transition:transform 0.2s ease;';
 
                         // Track row
                         var row = document.createElement('div');
@@ -12280,39 +12281,61 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
             clearTimeout(_l2ConsolidateTimer);
             _l2ConsolidateTimer = setTimeout(function() {
             eitiGetMessages(chatId).then(function(msgs) {
-                if (msgs.length < 3) return; // слишком мало для дайджеста
-                var key = _deobfKey(localStorage.getItem('deepseek_api_key') || '');
-                if (!key) return;
-                showToast('🧠 Сохраняю память сессии…'); // v9.15fix: индикатор фонового вызова
-                // Берём последние 15 сообщений для консолидации
+                if (msgs.length < 3) return;
+                var _activeProvider = localStorage.getItem('eiti_ai_provider') || 'deepseek';
+                var _dsKey = _deobfKey(localStorage.getItem('deepseek_api_key') || '');
+                var _gmKey = _deobfKey(localStorage.getItem('gemini_api_key') || '');
+                var _orKey = _deobfKey(localStorage.getItem('openrouter_api_key') || '');
+                // Use active provider first, then any available key
+                var _l2Provider = null, _l2Key = null;
+                if (_activeProvider === 'deepseek' && _dsKey) { _l2Provider = 'deepseek'; _l2Key = _dsKey; }
+                else if (_activeProvider === 'gemini' && _gmKey) { _l2Provider = 'gemini'; _l2Key = _gmKey; }
+                else if (_activeProvider === 'openrouter' && _orKey) { _l2Provider = 'openrouter'; _l2Key = _orKey; }
+                else if (_dsKey) { _l2Provider = 'deepseek'; _l2Key = _dsKey; }
+                else if (_gmKey) { _l2Provider = 'gemini'; _l2Key = _gmKey; }
+                else if (_orKey) { _l2Provider = 'openrouter'; _l2Key = _orKey; }
+                if (!_l2Provider) return;
+                showToast('🧠 Сохраняю память сессии…');
                 var slice = msgs.slice(-15).map(function(m){
                     return (m.role === 'user' ? 'Пользователь: ' : 'AI: ') + m.content;
                 }).join('\n');
+                var _l2Prompt = 'Сделай краткий дайджест диалога (3-5 предложений): что обсуждали, какие решения приняли, какие факты о пользователе стали известны. Только факты, без воды.';
                 var _l2Ac = new AbortController();
                 var _l2AbortTimer = setTimeout(function(){ _l2Ac.abort(); }, 30000);
-                fetch('https://api.deepseek.com/v1/chat/completions', {
-                    method: 'POST',
-                    signal: _l2Ac.signal,
-                    headers: {'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        model: 'deepseek-v4-flash',
-                        messages: [{
-                            role: 'system',
-                            content: 'Сделай краткий дайджест диалога (3-5 предложений): что обсуждали, какие решения приняли, какие факты о пользователе стали известны. Только факты, без воды.'
-                        }, {
-                            role: 'user',
-                            content: slice
-                        }],
-                        max_tokens: 300,
-                        temperature: 0.3
-                    })
-                }).then(function(r){ clearTimeout(_l2AbortTimer); return r.json(); }).then(function(data){
-                    var digest = data.choices && data.choices[0] && data.choices[0].message.content;
+                var _l2FetchPromise;
+                if (_l2Provider === 'gemini') {
+                    var _gmL2Url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + _l2Key;
+                    _l2FetchPromise = fetch(_gmL2Url, {
+                        method: 'POST', signal: _l2Ac.signal,
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            systemInstruction: { parts: [{ text: _l2Prompt }] },
+                            contents: [{ role: 'user', parts: [{ text: slice }] }],
+                            generationConfig: { maxOutputTokens: 300 }
+                        })
+                    }).then(function(r){ clearTimeout(_l2AbortTimer); return r.json(); })
+                    .then(function(d){ return d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts[0].text; });
+                } else {
+                    var _l2Url = _l2Provider === 'deepseek' ? 'https://api.deepseek.com/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
+                    var _l2Model = _l2Provider === 'deepseek' ? 'deepseek-v4-flash' : (localStorage.getItem('eiti_or_model') || 'openrouter/auto');
+                    var _l2Headers = {'Authorization': 'Bearer ' + _l2Key, 'Content-Type': 'application/json'};
+                    if (_l2Provider === 'openrouter') { _l2Headers['HTTP-Referer'] = 'https://velantrim.eiti'; _l2Headers['X-Title'] = 'VELANTRIM EITI'; }
+                    _l2FetchPromise = fetch(_l2Url, {
+                        method: 'POST', signal: _l2Ac.signal, headers: _l2Headers,
+                        body: JSON.stringify({
+                            model: _l2Model,
+                            messages: [{ role: 'system', content: _l2Prompt }, { role: 'user', content: slice }],
+                            max_tokens: 300, temperature: 0.3
+                        })
+                    }).then(function(r){ clearTimeout(_l2AbortTimer); return r.json(); })
+                    .then(function(d){ return d.choices && d.choices[0] && d.choices[0].message.content; });
+                }
+                _l2FetchPromise.then(function(digest){
                     if (digest) {
                         eitiGetChats().then(function(chats){
                             var chat = chats.find(function(c){ return c.id === chatId; });
                             eitiL2Save(chatId, chat ? chat.title : 'Чат', digest);
-                            showToast('✅ Память сессии сохранена'); // v9.15fix
+                            showToast('✅ Память сессии сохранена');
                         });
                     }
                 }).catch(function(){ clearTimeout(_l2AbortTimer); });
