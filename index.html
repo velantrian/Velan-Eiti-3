@@ -1126,25 +1126,25 @@
         #tts-float-player {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 88px;
+            top: 54px;
+            left: 8px;
+            right: 8px;
+            height: auto;
+            min-height: 56px;
             background: linear-gradient(180deg, var(--secondary-color,#5a4632) 0%, var(--primary-color,#2b1e16) 100%);
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
-            border: none;
-            border-bottom: 2px solid rgba(255,215,0,0.35);
-            border-radius: 0;
+            border: 1px solid rgba(255,215,0,0.25);
+            border-radius: 16px;
             align-items: center;
             gap: 8px;
-            padding: 0 16px;
+            padding: 0 14px;
             z-index: 1500;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,215,0,0.1);
             transition: opacity 0.22s, transform 0.22s;
         }
         #tts-float-player.visible { display: flex; }
-        #tts-float-player.hiding { opacity: 0; transform: translateY(-100%); }
+        #tts-float-player.hiding { opacity: 0; transform: translateY(-20px); }
         .tts-fp-btn {
             width: 38px; height: 38px; border-radius: 50%; border: none;
             background: rgba(255,215,0,0.1); color: #ffd700;
@@ -6030,8 +6030,7 @@
             var provIcons = {webspeech:'🖥️', openai:'🤖', google:'🔵', elevenlabs:'🎙️'};
             var pi = document.getElementById('tts-fp-provider');
             if (pi) pi.textContent = provIcons[provider || 'webspeech'] || '🔊';
-            var h1 = document.querySelector('.app-header h1');
-            if (h1) h1.style.visibility = 'hidden';
+            // v12.9.44: заголовок больше не скрывается — TTS окошко теперь ниже шапки
         }
         function _eitiFloatPlayerHide() {
             _stickyTTSMsgId = null; _stickyTTSText = null;
@@ -6039,8 +6038,6 @@
             if (!fp) return;
             fp.classList.add('hiding');
             setTimeout(function() { fp.classList.remove('visible','hiding','paused'); }, 220);
-            var h1 = document.querySelector('.app-header h1');
-            if (h1) h1.style.visibility = '';
         }
         function _eitiFloatPlayerSetPaused(isPaused) {
             var fp = document.getElementById('tts-float-player');
