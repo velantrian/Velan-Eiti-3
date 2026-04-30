@@ -1126,7 +1126,7 @@
         #tts-float-player {
             display: none;
             position: fixed;
-            bottom: 72px;
+            top: 88px;
             left: 10px;
             right: 10px;
             background: rgba(22,14,6,0.96);
@@ -1142,7 +1142,7 @@
             transition: opacity 0.2s, transform 0.2s;
         }
         #tts-float-player.visible { display: flex; }
-        #tts-float-player.hiding { opacity: 0; transform: translateY(12px); }
+        #tts-float-player.hiding { opacity: 0; transform: translateY(-12px); }
         .tts-fp-btn {
             width: 38px; height: 38px; border-radius: 50%; border: none;
             background: rgba(255,215,0,0.1); color: #ffd700;
@@ -2828,7 +2828,7 @@
                                 </div>
                                 <div id="cm-desc" style="font-size:11px;opacity:0.55;margin-top:6px;text-align:center;"></div>
                                 <div style="font-size:11px;opacity:0.4;margin-top:5px;line-height:1.65;padding:6px 8px;background:rgba(255,255,255,0.04);border-radius:8px;">
-                                    🎯 <b>Точность</b> → <code style="font-size:10px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:4px;">deepseek-v4-pro</code> — думает перед ответом<br>
+                                    🎯 <b>Точность</b> → <code style="font-size:10px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:4px;">deepseek-v4-flash</code> — факты, код, точность<br>
                                     ⚖️ <b>Баланс</b> → <code style="font-size:10px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:4px;">deepseek-v4-flash</code> — быстро и точно<br>
                                     🔭 <b>Идеи</b> → <code style="font-size:10px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:4px;">deepseek-v4-flash</code> — творческий режим<br>
                                     🌐 <b>Поиск</b> → <code style="font-size:10px;background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:4px;">deepseek-v4-flash</code> + DuckDuckGo — онлайн-контекст
@@ -11993,7 +11993,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                 }
 
                 // ── DeepSeek SSE path (default) ────────────────────
-                var _aiModel = (_cogMode === 'precision') ? 'deepseek-v4-pro' : 'deepseek-v4-flash';
+                var _aiModel = 'deepseek-v4-flash';
                 fetch('https://api.deepseek.com/v1/chat/completions', {
                     method: 'POST',
                     signal: _abortCtrl.signal,
@@ -12049,7 +12049,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                             // Показываем индикатор «⏸ читаю»
                             var _ind = document.createElement('div');
                             _ind.id = 'eiti-scroll-pause-ind';
-                            _ind.style.cssText = 'display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);' +
+                            _ind.style.cssText = 'display:none;position:fixed;bottom:120px;left:50%;transform:translateX(-50%);' +
                                 'background:rgba(0,0,0,0.72);color:#fff;font-size:13px;padding:6px 14px;border-radius:20px;' +
                                 'z-index:9999;pointer-events:none;backdrop-filter:blur(6px);letter-spacing:0.3px;';
                             _ind.textContent = '⏸ пауза — доскрольте вниз для продолжения';
@@ -25055,7 +25055,7 @@ window.eitiLLMClearAll = async function() {
 
                 <div>
                     <div style="font-size:14px;font-weight:700;color:var(--accent-color,#ffd700);margin-bottom:4px;">🧬 Режимы мышления AI</div>
-                    <b>🎯 Точность</b> — факты и код. Модель <b>deepseek-v4-pro</b>: думает перед ответом, максимальная точность.<br>
+                    <b>🎯 Точность</b> — факты и код. Модель <b>deepseek-v4-flash</b>: строгий режим, минимум фантазий.<br>
                     <b>⚖️ Баланс</b> — стандартный режим. Модель <b>deepseek-v4-flash</b>: быстро и точно.<br>
                     <b>🔭 Идеи</b> — творческий режим, гипотезы и нестандартные решения. Модель <b>deepseek-v4-flash</b>.<br>
                     <b>🌐 Поиск</b> — онлайн-режим: запрос ищется через DuckDuckGo, результаты передаются AI как контекст.
