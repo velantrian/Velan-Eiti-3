@@ -7043,16 +7043,84 @@
                     if (!list) return;
                     if (tracks.length === 0) { list.innerHTML = '<div style="padding:14px;color:rgba(255,255,255,0.3);font-size:13px;text-align:center;">Добавьте треки +</div>'; return; }
                     list.innerHTML = '';
+                    var DELETE_W = 72;
                     tracks.forEach(function(f, i) {
+                        var name = f.name.replace(/\.[^/.]+$/, '');
+
+                        // Wrapper clips the delete button until swipe reveals it
+                        var wrapper = document.createElement('div');
+                        wrapper.style.cssText = 'position:relative;overflow:hidden;border-bottom:1px solid rgba(255,255,255,0.06);';
+
+                        // Sliding container: row + delete button side by side
+                        var swipeContent = document.createElement('div');
+                        swipeContent.style.cssText = 'display:flex;will-change:transform;transition:transform 0.2s ease;';
+
+                        // Track row
                         var row = document.createElement('div');
                         row.setAttribute('data-track-idx', i);
-                        var name = f.name.replace(/\.[^/.]+$/, '');
-                        row.style.cssText = 'padding:11px 14px;font-size:14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.06);transition:background 0.15s;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;gap:8px;'
+                        row.style.cssText = 'flex:1;min-width:0;padding:11px 14px;font-size:14px;cursor:pointer;transition:background 0.15s;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;gap:8px;'
                             + (i === currentTrack ? 'background:rgba(255,215,0,0.12);color:var(--accent-color,#ffd700);font-weight:600;' : 'color:var(--text-color,#fff);');
                         row.innerHTML = '<span style="flex-shrink:0;width:14px;text-align:center;">' + (i === currentTrack ? '▶' : '') + '</span>'
                             + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + name + '</span>';
+
+                        // Delete button (hidden to the right)
+                        var delBtn = document.createElement('div');
+                        delBtn.style.cssText = 'min-width:' + DELETE_W + 'px;width:' + DELETE_W + 'px;background:#e53935;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent;';
+                        delBtn.textContent = 'Удалить';
+
+                        swipeContent.appendChild(row);
+                        swipeContent.appendChild(delBtn);
+                        wrapper.appendChild(swipeContent);
+                        list.appendChild(wrapper);
+
+                        // Swipe state
+                        var swipeOpen = false;
+                        var startX = 0, startY = 0, dx = 0;
+                        var cancelled = false, dragging = false;
+
+                        function snapOpen() { swipeContent.style.transform = 'translateX(-' + DELETE_W + 'px)'; swipeOpen = true; }
+                        function snapClose() { swipeContent.style.transform = 'translateX(0)'; swipeOpen = false; }
+
+                        swipeContent.addEventListener('touchstart', function(e) {
+                            var t = e.touches[0];
+                            startX = t.clientX; startY = t.clientY;
+                            dx = 0; cancelled = false; dragging = false;
+                            swipeContent.style.transition = 'none';
+                        }, { passive: true });
+
+                        swipeContent.addEventListener('touchmove', function(e) {
+                            if (cancelled) return;
+                            var t = e.touches[0];
+                            dx = t.clientX - startX;
+                            var dy = t.clientY - startY;
+                            // First meaningful move: decide axis
+                            if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+                                if (Math.abs(dy) > Math.abs(dx)) { cancelled = true; return; }
+                                dragging = true;
+                            }
+                            if (!dragging) return;
+                            e.preventDefault();
+                            var base = swipeOpen ? -DELETE_W : 0;
+                            var tx = Math.min(0, Math.max(base + dx, -DELETE_W));
+                            swipeContent.style.transform = 'translateX(' + tx + 'px)';
+                        }, { passive: false });
+
+                        swipeContent.addEventListener('touchend', function() {
+                            swipeContent.style.transition = 'transform 0.2s ease';
+                            if (!dragging) return;
+                            if (swipeOpen) {
+                                // Was open: close only if swiped right enough
+                                if (dx > 30) { snapClose(); } else { snapOpen(); }
+                            } else {
+                                // Was closed: open if swiped left enough
+                                if (dx < -36) { snapOpen(); } else { snapClose(); }
+                            }
+                        }, { passive: true });
+
+                        // Row click: if open → close; otherwise play
                         row.onclick = (function(idx) {
                             return function() {
+                                if (swipeOpen) { snapClose(); return; }
                                 var wasPlaying = isPlaying;
                                 currentTrack = idx;
                                 _eitiLoadTrack(idx);
@@ -7070,6 +7138,27 @@
                                 vibrate();
                             };
                         })(i);
+
+                        // Delete button click
+                        delBtn.onclick = (function(idx) {
+                            return function(e) {
+                                e.stopPropagation();
+                                var wasActive = (idx === currentTrack);
+                                tracks.splice(idx, 1);
+                                if (currentTrack > idx) { currentTrack--; }
+                                else if (currentTrack >= tracks.length) { currentTrack = Math.max(0, tracks.length - 1); }
+                                if (tracks.length === 0) { audio.pause(); audio.src = ''; isPlaying = false; }
+                                else if (wasActive) {
+                                    _eitiLoadTrack(currentTrack);
+                                    if (isPlaying) audio.play().catch(function(){});
+                                }
+                                if (typeof updateCount === 'function') updateCount('music', tracks.length);
+                                window.renderPlayerTrackList();
+                                if (typeof showToast === 'function') showToast('🗑 Трек удалён');
+                                if (typeof vibrate === 'function') vibrate();
+                            };
+                        })(i);
+
                         // Long press на строке плейлиста — показать полное название
                         (function(fullName) {
                             var _lpt = null;
@@ -7082,7 +7171,6 @@
                             row.addEventListener('touchend', function() { clearTimeout(_lpt); }, { passive: true });
                             row.addEventListener('touchmove', function() { clearTimeout(_lpt); }, { passive: true });
                         })(name);
-                        list.appendChild(row);
                     });
                     var activeRow = list.querySelector('[data-track-idx="' + currentTrack + '"]');
                     if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
