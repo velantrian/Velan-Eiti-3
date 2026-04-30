@@ -11262,7 +11262,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                 if (learnedFacts.length > 0) {
                     sysContent += '\n\n=== ВЫУЧЕННЫЕ ФАКТЫ О ПОЛЬЗОВАТЕЛЕ ===';
                     learnedFacts.slice().sort(function(a,b){ return (b.salience||1) - (a.salience||1); })
-                        .slice(0, 15).forEach(function(f) {
+                        .slice(0, 30).forEach(function(f) {
                         var mark = (f.salience >= 2.0) ? '🔥 ' : (f.salience >= 1.4) ? '⭐ ' : '· ';
                         sysContent += '\n' + mark + f.fact;
                     });
@@ -11270,7 +11270,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                 }
 
                 // L2 — дайджесты прошлых чатов (MTM cross-session) + Ebbinghaus Decay
-                var l2digests = eitiL2Get(3);
+                var l2digests = eitiL2Get(10);
                 if (l2digests.length > 0) {
                     // Increment accessCount for reinforcement (S grows → slower decay next time)
                     l2digests.forEach(function(d) {
@@ -11320,7 +11320,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                 if (_personalMem.length > 0) {
                     sysContent += '\n\n=== ЛИЧНАЯ ПАМЯТЬ (EITI Memory) ===';
                     sysContent += '\nПРАВИЛО: эти записи — реальные факты о пользователе, используй их при ответе.';
-                    _personalMem.slice(0, 20).forEach(function(e) {
+                    _personalMem.slice(0, 40).forEach(function(e) {
                         sysContent += '\n[' + (e.tag||'general') + '] ' + e.text;
                     });
                     if (_personalMem.length > 40) sysContent += '\n[...ещё ' + (_personalMem.length - 40) + ' записей]';
@@ -11339,7 +11339,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                 }
 
                 // ── v12.9.40: PKG — Хеббианский граф знаний о пользователе ──
-                var _pkgTop = (typeof pkgGetTopNodes === 'function') ? pkgGetTopNodes(5) : [];
+                var _pkgTop = (typeof pkgGetTopNodes === 'function') ? pkgGetTopNodes(12) : [];
                 if (_pkgTop.length > 0) {
                     sysContent += '\n\n=== ХЕББИАНСКИЙ ГРАФ ЗНАНИЙ (PKG) ===';
                     sysContent += '\nПРАВИЛО: эти темы — реальные интересы и приоритеты пользователя, взвешенные по частоте и значимости.';
@@ -11406,7 +11406,7 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                 if (allNotes && allNotes.length > 0) {
                     sysContent += '\n\n=== ЗАМЕТКИ ПОЛЬЗОВАТЕЛЯ (' + allNotes.length + ' шт.) ===';
                     allNotes.forEach(function(n, i) {
-                        var body = (n.body || '').slice(0, 600);
+                        var body = (n.body || '').slice(0, 1500);
                         if ((n.body||'').length > 1500) body += '\n[...обрезано]';
                         sysContent += '\n[' + (i+1) + '. ' + (n.title || 'Без названия') + ']\n' + body;
                     });
