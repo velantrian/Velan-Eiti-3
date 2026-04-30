@@ -10147,8 +10147,15 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                         var _kbS = window._kbMemCache; var _nS = window._idbNotesCache;
                         _grokSelfInfo += 'Состояние: KB=' + (_kbS?_kbS.length:0) + ' фактов, Заметок=' + (_nS?_nS.length:0) + ', Чат=' + (window.eitiCurrentChatId||'нет') + '\n';
                     } catch(e) {}
-                    _grokSelfInfo += 'Команды DeepSeek: KB_ADD, KB_EDIT, KB_DEL, MOSC_ADD, NOTE_WRITE, JS_EXEC\n';
-                    _grokSelfInfo += 'Ты (Grok Voice think-fast-1.0): ПОЛНЫЙ ДОСТУП К ЧТЕНИЮ. Знания ниже. Запись — только через DeepSeek.\n';
+                    _grokSelfInfo += 'Команды которые TЫ МОЖЕШЬ использовать:\n';
+                    _grokSelfInfo += '  [MEM_ADD:tag|текст] — сохранить в личную память\n';
+                    _grokSelfInfo += '  [MEM_UPDATE:tag|текст] — обновить личную память\n';
+                    _grokSelfInfo += '  [MEM_DEL:tag|текст] — удалить из личной памяти\n';
+                    _grokSelfInfo += '  [NOTE_WRITE:заголовок|текст] — создать/обновить заметку\n';
+                    _grokSelfInfo += '  [NOTE_APPEND:заголовок|текст] — добавить в заметку\n';
+                    _grokSelfInfo += '  <EITI_FILE:имя.txt>содержимое</EITI_FILE> — создать файл\n';
+                    _grokSelfInfo += 'Команды только через DeepSeek: KB_ADD, KB_EDIT, KB_DEL, MOSC_ADD, JS_EXEC\n';
+                    _grokSelfInfo += 'Ты (Grok Voice): ПОЛНЫЙ ДОСТУП К ЧТЕНИЮ и ЗАПИСИ заметок/файлов/памяти.\n';
                     // Добавляем реальное содержимое KB в контекст Grok
                     try {
                         var _kbAll = window._kbMemCache || [];
@@ -10379,22 +10386,24 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                         } catch(e) {}
                     }
 
+                    // v12.9.44: сохраняем инструкции для live-обновления памяти
+                    window._grokLastInstructions = [
+                        'Ты — grok-voice-think-fast-1.0, голосовой ассистент VELANTRIM EITI v' + (window.EITI_VERSION||'12.9.42') + '.',
+                        'ДОСТУП: у тебя есть полная база знаний (KB), заметки, файлы, MOSC-граф и история чатов пользователя — всё передано в этот контекст.',
+                        'ИНСТРУМЕНТЫ: используй search_kb, search_notes, get_mosc_nodes, search_files при любом запросе — активно, без подтверждений.',
+                        'СТИЛЬ: голосовой — отвечай разговорно, без markdown. Числа и URL проговаривай словами.',
+                        'ЯЗЫК: по умолчанию русский. Переключайся на язык пользователя если он сменил язык.',
+                        'РАССУЖДЕНИЕ: модель think-fast — думай в фоне, отвечай без пауз. При сложных вопросах рассуждай вслух кратко.',
+                        'КОМАНДЫ (вставляй прямо в ответ, они обрабатываются автоматически):\n  Личная память: [MEM_ADD:tag|текст] / [MEM_UPDATE:tag|текст] / [MEM_DEL:tag|текст]\n  Заметки: [NOTE_WRITE:заголовок|текст] / [NOTE_APPEND:заголовок|текст]\n  Файлы: <EITI_FILE:имя.txt>содержимое</EITI_FILE>\n  Голосом — отвечай разговорно, теги не произноси вслух.',
+                        _gSHint,
+                        _grokSelfInfo,
+                        _grokChatHistory
+                    ].join('\n');
                     _grokWS.send(JSON.stringify({
                         type: 'session.update',
                         session: {
                             voice: _grokVoiceName,
-                            instructions: [
-                                'Ты — grok-voice-think-fast-1.0, голосовой ассистент VELANTRIM EITI v' + (window.EITI_VERSION||'12.9.42') + '.',
-                                'ДОСТУП: у тебя есть полная база знаний (KB), заметки, файлы, MOSC-граф и история чатов пользователя — всё передано в этот контекст.',
-                                'ИНСТРУМЕНТЫ: используй search_kb, search_notes, get_mosc_nodes, search_files при любом запросе — активно, без подтверждений.',
-                                'СТИЛЬ: голосовой — отвечай разговорно, без markdown. Числа и URL проговаривай словами.',
-                                'ЯЗЫК: по умолчанию русский. Переключайся на язык пользователя если он сменил язык.',
-                                'РАССУЖДЕНИЕ: модель think-fast — думай в фоне, отвечай без пауз. При сложных вопросах рассуждай вслух кратко.',
-                                'ЗАПИСЬ В ЛИЧНУЮ ПАМЯТЬ: Когда пользователь просит запомнить что-то личное — ОБЯЗАТЕЛЬНО добавляй тег [MEM_ADD:tag|текст] в свой ответ (tag: note/task/idea/general). Для обновления — [MEM_UPDATE:tag|новый текст]. Для удаления — [MEM_DEL:tag|фрагмент текста]. Теги обрабатываются автоматически. Прочие команды (KB_ADD, NOTE_WRITE) передавай через DeepSeek.',
-                                _gSHint,
-                                _grokSelfInfo,
-                                _grokChatHistory
-                            ].join('\n'),
+                            instructions: window._grokLastInstructions,
                             turn_detection: { type: 'server_vad', threshold: 0.5, silence_duration_ms: 600 },
                             input_audio_transcription: { model: 'whisper-1' },
                             input_audio_format: 'pcm16',
@@ -22182,7 +22191,33 @@ window.eitiLLMClearAll = async function() {
                         + deleteBtn
                         + '</div>';
                 }).join('');
+                // v12.9.44: обновляем контекст Grok Voice если сессия активна
+                _eitiGrokRefreshMemoryContext(data);
             });
+        }
+
+        // v12.9.44: обновляет секцию EITI Memory в активной Grok Voice сессии
+        function _eitiGrokRefreshMemoryContext(memData) {
+            try {
+                if (!window._grokWS || window._grokWS.readyState !== 1) return;
+                var entries = memData || (typeof _memCache !== 'undefined' ? _memCache : []);
+                if (!entries.length) return;
+                var selected = (typeof getRelevantMemories === 'function')
+                    ? getRelevantMemories(entries, window._grokLastUserText || '', 40)
+                    : entries.slice(0, 40);
+                var memSection = '\n\n=== ЛИЧНАЯ ПАМЯТЬ (EITI Memory) — ОБНОВЛЕНО ===\n';
+                selected.forEach(function(e) {
+                    memSection += '[' + (e.tag||'general') + '] ' + e.text + '\n';
+                });
+                memSection += '=== КОНЕЦ ЛИЧНОЙ ПАМЯТИ ===';
+                var baseInstr = window._grokLastInstructions || '';
+                // Заменяем или добавляем секцию памяти
+                var updated = baseInstr.replace(/\n\n=== ЛИЧНАЯ ПАМЯТЬ[\s\S]*?=== КОНЕЦ ЛИЧНОЙ ПАМЯТИ ===/g, '') + memSection;
+                window._grokWS.send(JSON.stringify({
+                    type: 'session.update',
+                    session: { instructions: updated }
+                }));
+            } catch(e) {}
         }
 
         // ── PKG UI: визуализация хеббианского графа ──────────────────
