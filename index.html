@@ -1489,7 +1489,45 @@
             display: flex;
             flex-direction: column;
         }
-        
+
+        /* v12.9.44: Music float player — плавающее окошко поверх любого таба */
+        #music-float-player {
+            display: none;
+            position: fixed;
+            top: 54px;
+            left: 8px;
+            right: 8px;
+            z-index: 1400;
+            max-height: 82vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 20px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,215,0,0.15);
+            transition: opacity 0.22s, transform 0.22s;
+        }
+        #music-float-player.mfp-visible { display: block; }
+        #music-float-player .player-container {
+            height: auto !important;
+            min-height: 0 !important;
+            border-radius: 20px !important;
+            position: relative;
+        }
+        #mfp-close-btn {
+            position: absolute;
+            top: 10px; right: 12px;
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255,255,255,0.15);
+            color: rgba(255,255,255,0.75);
+            font-size: 15px; cursor: pointer;
+            z-index: 10;
+            display: flex; align-items: center; justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+            flex-shrink: 0;
+        }
+        #mfp-close-btn:active { background: rgba(255,255,255,0.28); }
+
         .album-art {
             width: 160px;
             height: 160px;
@@ -1702,6 +1740,22 @@
             font-size:20px;color:#1a0e07;flex-shrink:0;
         }
         .history-title { font-size:9px;font-weight:700;letter-spacing:1.2px;color:rgba(200,150,60,0.55);text-transform:uppercase;padding:5px 10px 3px; }
+        /* v12.9.44: luxury layout в float-плеере */
+        #music-float-player.layout-luxury { background:linear-gradient(160deg,#1a0e07 0%,#0e0804 60%,#130b04 100%); }
+        #music-float-player.layout-luxury .player-container { flex:0 0 auto;min-height:0;padding:0;display:flex;flex-direction:column;background:transparent; }
+        #music-float-player.layout-luxury .player-split { display:flex;flex:0 0 auto;gap:0;overflow:hidden;padding:6px 8px; }
+        #music-float-player.layout-luxury .player-controls { gap:6px;margin:6px 0;padding:0 2px; }
+        #music-float-player.layout-luxury .player-left { flex:0 0 58%;display:flex;flex-direction:column;gap:4px;overflow:hidden;min-width:0; }
+        #music-float-player.layout-luxury .player-right { flex:0 0 42%;display:flex;flex-direction:column;gap:0;overflow:hidden;padding-left:6px; }
+        #music-float-player.layout-luxury .album-art { width:100%;aspect-ratio:1/1;max-height:155px;border-radius:14px;background:linear-gradient(145deg,#2e1d0d,#160d04);border:1px solid rgba(180,130,50,0.4);display:flex;align-items:center;justify-content:center;font-size:44px;box-shadow:inset 0 2px 12px rgba(0,0,0,0.7),0 0 20px rgba(255,180,0,0.06);color:#c8961e;flex-shrink:0;position:relative;overflow:hidden;margin:0; }
+        #music-float-player.layout-luxury .track-name { font-size:15px;color:#f5e6c0; }
+        #music-float-player.layout-luxury .artist-name { font-size:11px;color:rgba(200,150,60,0.7); }
+        #music-float-player.layout-luxury .track-info { padding:4px 4px 0; }
+        #music-float-player.layout-luxury .progress-bar { height:5px;background:rgba(139,99,61,0.35);border-radius:3px;overflow:visible; }
+        #music-float-player.layout-luxury .progress-fill { background:linear-gradient(90deg,#c8601e,#e89020,#ffd700);border-radius:3px;position:relative; }
+        #music-float-player.layout-luxury .progress-fill::after { content:'';position:absolute;right:-4px;top:-3px;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle,#ffd700 40%,#c8961e 100%);box-shadow:0 0 6px rgba(255,215,0,0.8); }
+        #music-float-player.layout-luxury .player-btn { width:38px;height:38px;border-radius:50%;background:linear-gradient(145deg,#3a2810,#241709);border:1px solid rgba(180,130,50,0.45);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,215,0,0.12);font-size:14px;color:#c8961e;transition:transform 0.12s,box-shadow 0.12s;flex-shrink:0; }
+        #music-float-player.layout-luxury .player-btn.big { width:54px;height:54px;background:radial-gradient(circle at 38% 38%,#e8b030,#c8801e 55%,#8b5310 100%);border:1.5px solid rgba(255,215,0,0.6);box-shadow:0 0 16px rgba(255,180,0,0.35),0 4px 14px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,200,0.25);font-size:20px;color:#1a0e07;flex-shrink:0; }
         /* === FILES === */
         .files-container {
             padding: 14px 12px;
@@ -2754,8 +2808,14 @@
             </div>
             
             <!-- PLAYER (layout controlled by eitiSetPlayerLayout) -->
-            <div id="view-player" class="content-view" style="overflow-y:auto;-webkit-overflow-scrolling:touch;">
-                <!-- Rendered by eitiSetPlayerLayout() on DOMContentLoaded -->
+            <div id="view-player" class="content-view" style="display:none!important;">
+                <!-- v12.9.44: плеер перенесён в #music-float-player (плавающее окошко) -->
+            </div>
+
+            <!-- v12.9.44: Music float player — вне системы табов, плавает поверх -->
+            <div id="music-float-player">
+                <button id="mfp-close-btn" onclick="eitiHideMusicFloat()" title="Закрыть плеер">✕</button>
+                <!-- заполняется eitiSetPlayerLayout() -->
             </div>
             
             <!-- FILES -->
@@ -5092,7 +5152,8 @@
         function eitiSetPlayerLayout(layout, silent) {
             layout = layout || 'classic';
             try { localStorage.setItem('eiti_player_layout', layout); } catch(e) {}
-            var vp = document.getElementById('view-player');
+            // v12.9.44: рендерим в float-плеер, view-player оставляем пустым
+            var vp = document.getElementById('music-float-player') || document.getElementById('view-player');
             if (!vp) return;
             vp.classList.remove('layout-classic', 'layout-luxury');
             vp.classList.add('layout-' + layout);
@@ -5109,7 +5170,10 @@
                 // Пауза без сброса состояния
                 if (_oldAudio && !_oldAudio.paused) _oldAudio.pause();
 
+                // v12.9.44: сохраняем кнопку закрыть перед перезаписью innerHTML
+                var _closeBtnSaved = vp.querySelector('#mfp-close-btn');
                 vp.innerHTML = _playerLayoutTemplates[layout] || _playerLayoutTemplates.classic;
+                if (_closeBtnSaved) vp.insertBefore(_closeBtnSaved, vp.firstChild);
 
                 setTimeout(function() {
                     if (typeof window._eitiBindPlayerEvents === 'function') window._eitiBindPlayerEvents();
@@ -6968,6 +7032,44 @@
                     });
                 }
             };
+
+            // v12.9.44: перехватываем 'player' — показываем плавающее окошко вместо таба
+            (function() {
+                var _origSV = window._eitiSwitchView;
+                window._eitiSwitchView = function(newView) {
+                    if (newView === 'player') {
+                        var mfp = document.getElementById('music-float-player');
+                        if (!mfp) { _origSV(newView); return; }
+                        var isVis = mfp.classList.contains('mfp-visible');
+                        if (isVis) {
+                            mfp.classList.remove('mfp-visible');
+                            var prev = eitiPrevView || 'chat';
+                            if (prev !== 'player') _origSV(prev);
+                        } else {
+                            mfp.classList.add('mfp-visible');
+                            for (var k in window._tabCache) window._tabCache[k].classList.remove('active');
+                            var tEl = window._tabCache['player'] || document.querySelector('.tab-item[data-view="player"]');
+                            if (tEl) tEl.classList.add('active');
+                            vibrate();
+                        }
+                        return;
+                    }
+                    _origSV(newView);
+                };
+                window.eitiHideMusicFloat = function() {
+                    var mfp = document.getElementById('music-float-player');
+                    if (mfp) mfp.classList.remove('mfp-visible');
+                    var tEl = window._tabCache && window._tabCache['player'];
+                    if (tEl) tEl.classList.remove('active');
+                    var prev = eitiPrevView || 'chat';
+                    if (prev !== 'player') {
+                        var prevTab = window._tabCache && window._tabCache[prev];
+                        if (prevTab) prevTab.classList.add('active');
+                        var prevView = document.getElementById('view-' + prev);
+                        if (prevView && !prevView.classList.contains('active')) prevView.classList.add('active');
+                    }
+                };
+            })();
 
             document.querySelectorAll('.tab-item').forEach(function(item) {
                 item.addEventListener('click', function() {
@@ -11309,7 +11411,10 @@ registerProcessor('grok-pcm-processor', GrokPCMProcessor);`;
                         var item = _eitiL2Cache.find(function(x){ return x.chatId === d.chatId; });
                         if (item) { item.accessCount = (item.accessCount || 0) + 1; idbL2Put(item); }
                     });
+                    // v12.9.44: поясняем AI что текущий чат НЕ входит в дайджесты
+                    var _totalChatsCached = _eitiL2Cache.length;
                     sysContent += '\n\n=== ПАМЯТЬ: ПРОШЛЫЕ СЕССИИ (L2 MTM) ===';
+                    sysContent += '\n[Всего дайджестов прошлых сессий в памяти: ' + _totalChatsCached + '. Показано топ-' + l2digests.length + ' по релевантности. ВАЖНО: текущий активный чат в этот список НЕ входит — он передан тебе выше как история диалога.]';
                     l2digests.forEach(function(d, i) {
                         var ago = Math.round((Date.now() - d.ts) / 60000);
                         var agoStr = ago < 60 ? ago + ' мин назад' : Math.round(ago/60) + ' ч назад';
@@ -21879,6 +21984,12 @@ window.eitiLLMClearAll = async function() {
                 return Promise.all(promises).then(function(results) { return results[0]; });
             }
             return new Promise(function(resolve) {
+                // v12.9.44: защита от дублей — пропускаем если такой текст уже сохранён за последние 10 сек
+                var _tenAgo = Date.now() - 10000;
+                var _isDupe = Array.isArray(_memCache) && _memCache.some(function(e) {
+                    return e.text === rawText && e.created >= _tenAgo;
+                });
+                if (_isDupe) { resolve(null); return; }
                 var id = 'mem_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
                 var rec = {
                     id: id,
@@ -22137,6 +22248,7 @@ window.eitiLLMClearAll = async function() {
             // Handle MEM_ADD
             var reAdd = /\[MEM_ADD(?::([^\|\]]+)\|)?([^\]]+)\]/g;
             var m;
+            var _savedTextsThisCall = new Set(); // v12.9.44: дедупликация в рамках одного ответа
             while ((m = reAdd.exec(text)) !== null) {
                 var tag = (m[1]||'ai').trim();
                 var txt = m[2].trim();
@@ -22149,7 +22261,11 @@ window.eitiLLMClearAll = async function() {
                     .replace(/\n{3,}/g, '\n\n')               // лишние переносы
                     .replace(/^\s+|\s+$/g, '')                // trim
                     .trim();
-                if (txt && txt.length > 2) { memSaveEntry({ text: txt, tag: tag, source: 'ai' }); saved++; }
+                if (txt && txt.length > 2 && !_savedTextsThisCall.has(txt)) {
+                    _savedTextsThisCall.add(txt);
+                    memSaveEntry({ text: txt, tag: tag, source: 'ai' });
+                    saved++;
+                }
             }
             // Handle MEM_UPDATE — overwrites existing tag entries, saves as UPDATED
             var reUpd = /\[MEM_UPDATE(?::([^\|\]]+)\|)?([^\]]+)\]/g;
