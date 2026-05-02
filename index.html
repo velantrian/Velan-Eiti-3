@@ -1528,6 +1528,51 @@
         }
         #mfp-close-btn:active { background: rgba(255,255,255,0.28); }
 
+        /* === Mini-player bar === */
+        #eiti-mini-player {
+            display: none;
+            position: fixed;
+            bottom: 111px;
+            left: 0; right: 0;
+            height: 52px;
+            z-index: 1300;
+            background: linear-gradient(135deg, var(--secondary-color, #1a0f0a) 0%, var(--primary-color, #0e0804) 100%);
+            border-top: 1px solid var(--border-color, rgba(139,99,61,0.5));
+            box-shadow: 0 -2px 12px rgba(0,0,0,0.5);
+            align-items: center;
+            padding: 0 12px;
+            gap: 10px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #eiti-mini-player.mini-visible { display: flex; }
+        #eiti-mini-track {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-color, #f5e6c0);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-left: 4px;
+        }
+        #eiti-mini-player button {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color, rgba(139,99,61,0.45));
+            background: rgba(255,255,255,0.08);
+            color: var(--accent-color, #ffd700);
+            font-size: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.15s;
+        }
+        #eiti-mini-player button:active { background: rgba(255,255,255,0.2); }
+
         .album-art {
             width: 160px;
             height: 160px;
@@ -2816,6 +2861,13 @@
             <div id="music-float-player">
                 <button id="mfp-close-btn" onclick="eitiHideMusicFloat()" title="Закрыть плеер">✕</button>
                 <!-- заполняется eitiSetPlayerLayout() -->
+            </div>
+
+            <!-- Mini-player bar (Telegram/Spotify-style) -->
+            <div id="eiti-mini-player" onclick="eitiMiniPlayerTap()">
+                <div id="eiti-mini-track">VELANTRIM Player</div>
+                <button id="eiti-mini-play" onclick="eitiMiniPlayPause(event)" title="Play/Pause">▶</button>
+                <button id="eiti-mini-next" onclick="eitiMiniNext(event)" title="Следующий">⏭</button>
             </div>
             
             <!-- FILES -->
@@ -7031,8 +7083,36 @@
             };
 
             // v12.9.44: перехватываем 'player' — показываем плавающее окошко вместо таба
+            // v12.9.45: mini-player bar при смене вкладок (Telegram/Spotify-style)
             (function() {
                 var _origSV = window._eitiSwitchView;
+                var miniEl = document.getElementById('eiti-mini-player');
+                var miniTrack = document.getElementById('eiti-mini-track');
+                var miniPlayBtn = document.getElementById('eiti-mini-play');
+
+                function _isMusicActive() {
+                    return typeof isPlaying !== 'undefined' && isPlaying;
+                }
+
+                function _syncMiniPlayer() {
+                    if (!miniTrack) return;
+                    var name = 'VELANTRIM Player';
+                    if (typeof tracks !== 'undefined' && typeof currentTrack !== 'undefined' && tracks[currentTrack]) {
+                        name = tracks[currentTrack].name.replace(/\.[^/.]+$/, '');
+                    }
+                    miniTrack.textContent = name;
+                    if (miniPlayBtn) {
+                        miniPlayBtn.textContent = _isMusicActive() ? '⏸' : '▶';
+                    }
+                }
+
+                function _showMini() {
+                    if (miniEl) { _syncMiniPlayer(); miniEl.classList.add('mini-visible'); }
+                }
+                function _hideMini() {
+                    if (miniEl) miniEl.classList.remove('mini-visible');
+                }
+
                 window._eitiSwitchView = function(newView) {
                     if (newView === 'player') {
                         var mfp = document.getElementById('music-float-player');
@@ -7040,9 +7120,11 @@
                         var isVis = mfp.classList.contains('mfp-visible');
                         if (isVis) {
                             mfp.classList.remove('mfp-visible');
+                            _hideMini();
                             var prev = eitiPrevView || 'chat';
                             if (prev !== 'player') _origSV(prev);
                         } else {
+                            _hideMini();
                             mfp.classList.add('mfp-visible');
                             for (var k in window._tabCache) window._tabCache[k].classList.remove('active');
                             var tEl = window._tabCache['player'] || document.querySelector('.tab-item[data-view="player"]');
@@ -7051,13 +7133,22 @@
                         }
                         return;
                     }
+                    var mfp = document.getElementById('music-float-player');
+                    if (mfp && mfp.classList.contains('mfp-visible')) {
+                        mfp.classList.remove('mfp-visible');
+                        var tEl = window._tabCache && window._tabCache['player'];
+                        if (tEl) tEl.classList.remove('active');
+                    }
+                    if (_isMusicActive()) { _showMini(); } else { _hideMini(); }
                     _origSV(newView);
                 };
+
                 window.eitiHideMusicFloat = function() {
                     var mfp = document.getElementById('music-float-player');
                     if (mfp) mfp.classList.remove('mfp-visible');
                     var tEl = window._tabCache && window._tabCache['player'];
                     if (tEl) tEl.classList.remove('active');
+                    if (_isMusicActive()) { _showMini(); }
                     var prev = eitiPrevView || 'chat';
                     if (prev !== 'player') {
                         var prevTab = window._tabCache && window._tabCache[prev];
@@ -7066,6 +7157,27 @@
                         if (prevView && !prevView.classList.contains('active')) prevView.classList.add('active');
                     }
                 };
+
+                window.eitiMiniPlayerTap = function() {
+                    var playerTab = document.querySelector('.tab-item[data-view="player"]');
+                    if (playerTab) playerTab.click();
+                };
+                window.eitiMiniPlayPause = function(e) {
+                    if (e) { e.stopPropagation(); e.preventDefault(); }
+                    var playBtn = document.getElementById('play');
+                    if (playBtn) playBtn.click();
+                    setTimeout(_syncMiniPlayer, 100);
+                };
+                window.eitiMiniNext = function(e) {
+                    if (e) { e.stopPropagation(); e.preventDefault(); }
+                    var nextBtn = document.getElementById('next');
+                    if (nextBtn) nextBtn.click();
+                    setTimeout(_syncMiniPlayer, 100);
+                };
+
+                window._eitiSyncMiniPlayer = _syncMiniPlayer;
+                window._eitiShowMini = _showMini;
+                window._eitiHideMini = _hideMini;
             })();
 
             document.querySelectorAll('.tab-item').forEach(function(item) {
@@ -7658,6 +7770,26 @@
                     var m = Math.floor(s / 60), sec = Math.floor(s % 60);
                     return m + ':' + (sec < 10 ? '0' : '') + sec;
                 }
+
+                // v12.9.45: sync mini-player on play/pause/ended/loadstart
+                audio.addEventListener('play', function() {
+                    if (typeof _eitiSyncMiniPlayer === 'function') _eitiSyncMiniPlayer();
+                    var mfp = document.getElementById('music-float-player');
+                    var isFull = mfp && mfp.classList.contains('mfp-visible');
+                    if (!isFull && typeof _eitiShowMini === 'function') _eitiShowMini();
+                });
+                audio.addEventListener('pause', function() {
+                    if (typeof _eitiSyncMiniPlayer === 'function') _eitiSyncMiniPlayer();
+                    if (typeof _eitiHideMini === 'function') _eitiHideMini();
+                });
+                audio.addEventListener('ended', function() {
+                    if (typeof _eitiSyncMiniPlayer === 'function') _eitiSyncMiniPlayer();
+                });
+                audio.addEventListener('loadstart', function() {
+                    setTimeout(function() {
+                        if (typeof _eitiSyncMiniPlayer === 'function') _eitiSyncMiniPlayer();
+                    }, 50);
+                });
 
                 // ── Media Session API — кнопки в шторке Android ────────────────
                 // Настраиваем один раз, обработчики живут через замыкание
