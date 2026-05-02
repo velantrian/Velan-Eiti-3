@@ -7051,6 +7051,12 @@
                         }
                         return;
                     }
+                    var mfp = document.getElementById('music-float-player');
+                    if (mfp && mfp.classList.contains('mfp-visible')) {
+                        mfp.classList.remove('mfp-visible');
+                        var tEl = window._tabCache && window._tabCache['player'];
+                        if (tEl) tEl.classList.remove('active');
+                    }
                     _origSV(newView);
                 };
                 window.eitiHideMusicFloat = function() {
