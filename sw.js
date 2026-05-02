@@ -9,6 +9,8 @@ var CORE_FILES = [
     BASE,
     BASE + 'index.html',
     BASE + 'manifest.json',
+    BASE + 'sql-wasm.js',
+    BASE + 'sql-wasm.wasm',
     BASE + 'icon-192.png',
     BASE + 'icon-192-maskable.png',
     BASE + 'icon-512.png',
