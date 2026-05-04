@@ -27720,5 +27720,228 @@ window.getRelevantMemories = function(memArray, query, max) {
     }).slice(0, max).map(function(x){ return x._m; });
 };
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     🧠 VELANTRIM EITI — UNIVERSAL CONTEXT BUILDER v12.9.45b
+     Экономный RAG-контекст: только релевантное по запросу
+     Вставьте ПЕРЕД </body> в index.html
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════════
+  // 1. ТОКЕН-СЧЁТЧИК
+  // ═══════════════════════════════════════════════════════════════
+  function eitiCountTokens(text) {
+    if (!text || typeof text !== 'string') return 0;
+    text = text.trim();
+    if (!text) return 0;
+
+    const cyrillic = (text.match(/[а-яёА-ЯЁ]/g) || []).length;
+    const total = text.length;
+    const ratio = cyrillic / total;
+
+    let charsPerToken = (ratio > 0.45) ? 3.82 : (ratio > 0.20 ? 3.95 : 4.18);
+    const special = (text.match(/[^\w\sа-яёА-ЯЁa-zA-Z0-9]/g) || []).length;
+
+    return Math.max(1, Math.ceil(total / charsPerToken + special * 0.38));
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 2. БЕЗОПАСНЫЕ RAG-ФУНКЦИИ (не конфликтуют с глобальными)
+  // ═══════════════════════════════════════════════════════════════
+
+  function _ctxSearchNotes(query, limit = 6) {
+    if (!query || typeof notesLoad !== 'function') return [];
+    const q = query.toLowerCase();
+    return notesLoad()
+      .map(n => {
+        const text = ((n.title || '') + ' ' + (n.body || '')).toLowerCase();
+        const score = (text.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { ...n, score };
+      })
+      .filter(n => n.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  function _ctxSearchFiles(query, limit = 3) {
+    if (!query || typeof getAiTextStore !== 'function') return [];
+    const q = query.toLowerCase();
+    const files = getAiTextStore().files || [];
+    return files
+      .filter(f => f && f.name && !f.name.startsWith('eiti_'))
+      .map(f => {
+        const text = ((f.name || '') + ' ' + (f.content || '')).toLowerCase();
+        const score = (text.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { ...f, score };
+      })
+      .filter(f => f.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  function _ctxSearchKB(query, limit = 8) {
+    if (!query || typeof eitiKBLoad !== 'function') return [];
+    const q = query.toLowerCase();
+    return eitiKBLoad()
+      .map(f => {
+        const text = ((f.triggers || []).join(' ') + ' ' + (f.answer || '')).toLowerCase();
+        const score = (text.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { ...f, score };
+      })
+      .filter(f => f.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  function _ctxSearchL2(query, limit = 5) {
+    if (!query || typeof eitiL2Get !== 'function') return [];
+    const q = query.toLowerCase();
+    return eitiL2Get(20)
+      .map(d => {
+        const text = ((d.title || '') + ' ' + (d.digest || '')).toLowerCase();
+        const score = (text.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { ...d, score };
+      })
+      .filter(d => d.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 3. СВОДКА «ЧТО НОВОГО»
+  // ═══════════════════════════════════════════════════════════════
+  function buildWhatsNewSummary(sinceTs) {
+    if (!sinceTs) return '';
+    var lines = [];
+    try {
+      var newNotes = notesLoad().filter(function(n) { return (n.updated||0) > sinceTs || (n.created||0) > sinceTs; });
+      if (newNotes.length) lines.push('• Создано/обновлено заметок: ' + newNotes.length);
+      var newFiles = (getAiTextStore().files||[]).filter(function(f) { return f.updated > sinceTs && !f.name.startsWith('eiti_'); });
+      if (newFiles.length) lines.push('• Новых/изменённых файлов: ' + newFiles.length);
+      var newKb = eitiKBLoad().filter(function(f) { return f.ts > sinceTs; });
+      if (newKb.length) lines.push('• Добавлено KB-фактов: ' + newKb.length);
+      var lastChat = (window._idbChatsCache||[]).slice(0,1)[0];
+      if (lastChat) lines.push('• Последний чат: ' + (lastChat.title||'') + ' (' + new Date(lastChat.updated).toLocaleDateString('ru') + ')');
+    } catch(e) {}
+    return lines.join('\n');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 4. ГЛАВНЫЙ КОНСТРУКТОР КОНТЕКСТА
+  // ═══════════════════════════════════════════════════════════════
+  window.eitiBuildUniversalContext = function(userQuery, options = {}) {
+    var parts = [];
+
+    // 1. Профиль
+    if (typeof eitiProfileToSystemText === 'function') {
+      var profile = eitiProfileToSystemText();
+      if (profile) parts.push(profile);
+    }
+
+    // 2. Оглавление (индексный файл) — всегда
+    if (typeof buildOrGetIndexFile === 'function') {
+      var index = buildOrGetIndexFile();
+      if (index) parts.push(index);
+    }
+
+    // 3. Только при пустом запросе — сводка «Что нового»
+    if (!userQuery || userQuery.length < 5) {
+      var lastSeen = parseInt(localStorage.getItem('eiti_last_seen_ts') || '0');
+      var summary = buildWhatsNewSummary(lastSeen);
+      if (summary) parts.push('\n=== ⚡ ЧТО НОВОГО С ПРОШЛОГО РАЗА ===\n' + summary);
+    }
+
+    // 4. RAG — только релевантное
+    if (userQuery && userQuery.length > 3) {
+      try {
+        var notes = _ctxSearchNotes(userQuery, 6);
+        if (notes.length) {
+          parts.push('\n=== РЕЛЕВАНТНЫЕ ЗАМЕТКИ ===');
+          notes.forEach(n => parts.push('📝 ' + (n.title || 'Без названия') + '\n' + (n.body || '').slice(0, 900)));
+        }
+
+        var files = _ctxSearchFiles(userQuery, 3);
+        if (files.length) {
+          parts.push('\n=== РЕЛЕВАНТНЫЕ ФАЙЛЫ ===');
+          files.forEach(f => {
+            parts.push('📄 ' + f.name + '\n' + (f.content || '').slice(0, 1100));
+          });
+        }
+
+        var kb = _ctxSearchKB(userQuery, 8);
+        if (kb.length) {
+          parts.push('\n=== РЕЛЕВАНТНЫЕ ФАКТЫ KB ===');
+          kb.forEach(f => parts.push('· [' + (f.category || 'общее') + '] ' + (f.triggers || []).join(', ') + ': ' + (f.answer || '')));
+        }
+
+        var l2 = _ctxSearchL2(userQuery, 5);
+        if (l2.length) {
+          parts.push('\n=== РЕЛЕВАНТНЫЕ ПРОШЛЫЕ СЕССИИ (L2) ===');
+          l2.forEach(d => {
+            var ago = Math.round((Date.now() - (d.ts || 0)) / 60000);
+            var agoStr = ago < 60 ? ago + ' мин назад' : Math.round(ago / 60) + ' ч назад';
+            parts.push('[' + (d.title || 'Чат') + ' · ' + agoStr + ']\n' + (d.digest || '').slice(0, 600));
+          });
+        }
+      } catch(e) {}
+    }
+
+    // 5. Текущий чат (всегда)
+    if (typeof chatLog !== 'undefined' && chatLog.length) {
+      var recent = chatLog.slice(-12).map(function(m) {
+        return (m.role === 'user' ? '👤' : '🤖') + ': ' + (m.text || '').slice(0, 380);
+      }).join('\n');
+      parts.push('\n=== ТЕКУЩИЙ ЧАТ ===\n' + recent);
+    }
+
+    var context = parts.join('\n');
+
+    // 6. Защита от переполнения
+    if (eitiCountTokens(context) > 22000) {
+      context = context.slice(0, 92000); // жёсткая обрезка ~22k токенов
+    }
+
+    return context;
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // 5. КНОПКА СБРОСА ПАМЯТИ
+  // ═══════════════════════════════════════════════════════════════
+  window.eitiResetAllMemory = function() {
+    if (!confirm('⚠️ ВНИМАНИЕ!\n\nЭто действие безвозвратно удалит:\n• Все чаты и историю\n• Все заметки\n• Все файлы\n• Настройки и API-ключи\n\nПродолжить?')) return;
+
+    try {
+      localStorage.clear();
+      var dbName = (typeof eitiDb !== 'undefined' && eitiDb) ? eitiDb.name : 'eiti_v4';
+      var req = indexedDB.deleteDatabase(dbName);
+      req.onsuccess = function() {
+        alert('✅ Вся память успешно очищена.\nПриложение будет перезагружено.');
+        location.reload();
+      };
+      req.onerror = function() {
+        alert('⚠️ Ошибка при очистке. Перезагрузите страницу вручную.');
+        location.reload();
+      };
+    } catch (e) {
+      alert('Ошибка сброса: ' + e.message);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // 6. АВТООТМЕТКА ВРЕМЕНИ
+  // ═══════════════════════════════════════════════════════════════
+  window.eitiMarkLastSeen = function() {
+    localStorage.setItem('eiti_last_seen_ts', Date.now());
+  };
+
+  // Выполняем при загрузке
+  eitiMarkLastSeen();
+
+  console.log('✅ Universal Context v12.9.45b активирован.');
+})();
+</script>
 </body>
 </html>
