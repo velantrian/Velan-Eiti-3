@@ -93,9 +93,16 @@ self.addEventListener('fetch', function(e) {
     );
 });
 
-// ── MESSAGE: принудительное обновление ──────────────
+// ── MESSAGE: принудительное обновление + уведомления ──
 self.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'SKIP_WAITING') {
+    if (!e.data) return;
+    if (e.data.type === 'SKIP_WAITING') {
         self.skipWaiting();
+    }
+    if (e.data.type === 'SHOW_NOTIFICATION') {
+        self.registration.showNotification(
+            e.data.title || '🔔 VELANTRIM EITI',
+            { body: e.data.body || '', icon: BASE + 'icon-192.png', badge: BASE + 'icon-192-maskable.png' }
+        );
     }
 });
