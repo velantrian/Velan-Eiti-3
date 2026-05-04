@@ -1,7 +1,7 @@
-// VELANTRIM EITI — Service Worker v12.9.42
+// VELANTRIM EITI — Service Worker v12.9.45
 // Scope определяется динамически из self.location — работает на GitHub Pages и локально
 
-var CACHE_NAME = 'eiti-v12.9.42';
+var CACHE_NAME = 'eiti-v12.9.45';
 // Определяем BASE динамически: папка где лежит sw.js
 var BASE = self.location.pathname.replace(/sw\.js$/, '');
 
@@ -42,7 +42,7 @@ self.addEventListener('activate', function(e) {
             // Уведомляем клиентов об обновлении
             self.clients.matchAll().then(function(clients) {
                 clients.forEach(function(client) {
-                    client.postMessage({ type: 'SW_UPDATED', version: "12.9.42" });
+                    client.postMessage({ type: 'SW_UPDATED', version: "12.9.45" });
                 });
             });
         })
