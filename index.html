@@ -27,6 +27,7 @@
         window._eitiState = { dominant_topic: '', mood: 'neutral', depth: 'medium', quality: 0.7 };
         window._eitiLemma = {};                 // словарь из lemma.json (или IDB)
         window._eitiLemmaPending = null;        // ожидает подтверждения обогащения
+        window._eitiBlobURLs = [];              // отслеживание blob URLs для cleanup
         // v12.9.1 FIX P4+P8: перенесено в DOMContentLoaded — showToast определён только после парсинга всего DOM.
         // Ключ теперь динамический на основе EITI_VERSION (ранее хардкод "v118" → всегда срабатывал на новых установках).
         document.addEventListener('DOMContentLoaded', function() {
@@ -42,7 +43,7 @@
             localStorage.setItem('eiti_ai_provider', 'openrouter');
             localStorage.setItem('eiti_token_budget', '5000');
             localStorage.setItem('eiti_ai_instructions', 'Всегда отвечай в чате, пиши с emojis по смыслу');
-            localStorage.setItem('eiti_icon_mode', 'classic');
+            localStorage.setItem('eiti_icon_mode', 'emoji_classic');
 
         });
         var EITI_BUILD_DATE = "2026-04-29T15:00"; // v12.9.42 — fix eitiRefreshBrowserVoices polling guard
@@ -5871,7 +5872,7 @@
                 }).then(function(r) {
                     if (!r.ok) return r.json().then(function(e){ throw new Error(e.error && e.error.message || r.status); });
                     return r.blob();
-                }).then(function(blob) { return URL.createObjectURL(blob); });
+                }).then(function(blob) { return eitiCreateBlobURL(blob); });
             }
             if (provider === 'google') {
                 var key = localStorage.getItem('eiti_tts_google_key') || '';
@@ -5894,7 +5895,7 @@
                     var bytes = atob(d.audioContent);
                     var arr = new Uint8Array(bytes.length);
                     for (var i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
-                    return URL.createObjectURL(new Blob([arr],{type:'audio/mp3'}));
+                    return eitiCreateBlobURL(new Blob([arr],{type:'audio/mp3'}));
                 });
             }
             if (provider === 'elevenlabs') {
@@ -5912,7 +5913,7 @@
                 }).then(function(r) {
                     if (!r.ok) return r.json().then(function(e){ throw new Error(e.detail && e.detail.message || r.status); });
                     return r.blob();
-                }).then(function(blob) { return URL.createObjectURL(blob); });
+                }).then(function(blob) { return eitiCreateBlobURL(blob); });
             }
             return Promise.reject(new Error('Неизвестный провайдер: ' + provider));
         }
@@ -6017,6 +6018,27 @@
             const st = getUIState();
             const next = Object.assign({}, st, patch);
             localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(next));
+        }
+
+        function eitiCreateBlobURL(blob) {
+            const url = URL.createObjectURL(blob);
+            if (!window._eitiBlobURLs.includes(url)) window._eitiBlobURLs.push(url);
+            return url;
+        }
+
+        function eitiRevokeBlobURL(url) {
+            if (url && url.startsWith('blob:')) {
+                try { URL.revokeObjectURL(url); } catch(e) {}
+                const idx = window._eitiBlobURLs.indexOf(url);
+                if (idx !== -1) window._eitiBlobURLs.splice(idx, 1);
+            }
+        }
+
+        function eitiRevokeAllBlobURLs() {
+            while (window._eitiBlobURLs.length > 0) {
+                const url = window._eitiBlobURLs.pop();
+                try { URL.revokeObjectURL(url); } catch(e) {}
+            }
         }
 
         const THEMES_VEL = [
@@ -6124,7 +6146,7 @@
             else document.body.classList.add('design-classic');
             setUIState({ design: designId });
             if (designId === 'kim3-metal') applyIconPack(getUIState().iconPack || 'kim3', true);
-            else applyIconPack(getUIState().iconPack || 'classic', true);
+            else applyIconPack(getUIState().iconPack || 'emoji_classic', true);
         }
 
         function renderThemeGrid() {
@@ -6878,7 +6900,7 @@
             // Apply saved UI profile
             const ui = getUIState();
             applyDesign(ui.design || 'classic');
-            applyIconPack(ui.iconPack || (ui.design==='kim3-metal' ? 'kim3' : 'classic'), true);
+            applyIconPack(ui.iconPack || (ui.design==='kim3-metal' ? 'kim3' : 'emoji_classic'), true);
             // Restore icon color override
             (function(){ try { var c = localStorage.getItem('eiti_icon_color'); if(c) eitiSetIconColor(c); } catch(e){} })();
             // Restore icon 3D
@@ -7028,15 +7050,8 @@
                 renderMessage(m);
             }
 
-            function escapeHtml(str){
-                return String(str)
-                    .replace(/&/g,'&amp;')
-                    .replace(/</g,'&lt;')
-                    .replace(/>/g,'&gt;')
-                    .replace(/"/g,'&quot;')
-                    .replace(/'/g,'&#039;');
-            }
-            
+            var escapeHtml = eitiEsc;
+
             if (chatLog.length === 0) addMessage('Привет! Я ваш AI-помощник. Чем могу помочь?', false);
             
             // ✅ FIX: send.onclick устанавливается в eitiPatchSendButton()
@@ -7099,88 +7114,95 @@
                     var DELETE_W = 72;
                     tracks.forEach(function(f, i) {
                         var name = f.name.replace(/\.[^/.]+$/, '');
-
-                        // Wrapper clips the delete button (overflow:hidden); delBtn is absolutely off-right
                         var wrapper = document.createElement('div');
                         wrapper.style.cssText = 'position:relative;overflow:hidden;width:100%;border-bottom:1px solid rgba(255,255,255,0.06);';
-
-                        // Track row — full width, slides left on swipe
                         var row = document.createElement('div');
                         row.setAttribute('data-track-idx', i);
                         row.style.cssText = 'width:100%;box-sizing:border-box;padding:11px 14px;font-size:14px;cursor:pointer;transition:background 0.15s;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;gap:8px;position:relative;z-index:1;'
                             + (i === currentTrack ? 'background:rgba(255,215,0,0.12);color:var(--accent-color,#ffd700);font-weight:600;' : 'color:var(--text-color,#fff);');
                         row.innerHTML = '<span style="flex-shrink:0;width:14px;text-align:center;">' + (i === currentTrack ? '▶' : '') + '</span>'
-                            + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + name + '</span>';
-
-                        // Delete button — absolutely positioned off-screen to the right, revealed by swipe
+                            + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + f.name + '">' + name + '</span>';
                         var delBtn = document.createElement('div');
-                        delBtn.style.cssText = 'position:absolute;right:0;top:0;bottom:0;width:' + DELETE_W + 'px;background:#e53935;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transform:translateX(100%);';
+                        delBtn.style.cssText = 'position:absolute;right:0;top:0;bottom:0;width:' + DELETE_W + 'px;background:#e53935;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transform:translateX(100%);z-index:2;';
                         delBtn.textContent = 'Удалить';
-
                         wrapper.appendChild(row);
                         wrapper.appendChild(delBtn);
                         list.appendChild(wrapper);
-
-                        // Swipe state
-                        var swipeOpen = false;
-                        var startX = 0, startY = 0, dx = 0;
-                        var cancelled = false, dragging = false;
-
-                        function snapOpen() {
-                            row.style.transition = 'transform 0.2s ease';
-                            row.style.transform = 'translateX(-' + DELETE_W + 'px)';
-                            delBtn.style.transition = 'transform 0.2s ease';
-                            delBtn.style.transform = 'translateX(0)';
-                            swipeOpen = true;
-                        }
-                        function snapClose() {
-                            row.style.transition = 'transform 0.2s ease';
-                            row.style.transform = 'translateX(0)';
-                            delBtn.style.transition = 'transform 0.2s ease';
-                            delBtn.style.transform = 'translateX(100%)';
-                            swipeOpen = false;
-                        }
-
-                        row.addEventListener('touchstart', function(e) {
-                            var t = e.touches[0];
-                            startX = t.clientX; startY = t.clientY;
-                            dx = 0; cancelled = false; dragging = false;
+                    });
+                    if (!list.__swipeState) {
+                        list.__swipeState = {};
+                        var DELETE_W_DEL = 72;
+                        list.addEventListener('touchstart', function(e) {
+                            var row = e.target.closest('[data-track-idx]');
+                            if (!row || !row.parentElement) return;
+                            var wrapper = row.parentElement;
+                            var delBtn = wrapper.querySelector('div:last-child');
+                            var state = { row: row, delBtn: delBtn, startX: e.touches[0].clientX, startY: e.touches[0].clientY, dx: 0, cancelled: false, dragging: false };
+                            list.__swipeState = state;
                             row.style.transition = 'none';
                             delBtn.style.transition = 'none';
                         }, { passive: true });
-
-                        row.addEventListener('touchmove', function(e) {
-                            if (cancelled) return;
+                        list.addEventListener('touchmove', function(e) {
+                            var state = list.__swipeState;
+                            if (!state || state.cancelled) return;
                             var t = e.touches[0];
-                            dx = t.clientX - startX;
-                            var dy = t.clientY - startY;
-                            if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-                                if (Math.abs(dy) > Math.abs(dx)) { cancelled = true; return; }
-                                dragging = true;
+                            state.dx = t.clientX - state.startX;
+                            var dy = t.clientY - state.startY;
+                            if (!state.dragging && (Math.abs(state.dx) > 5 || Math.abs(dy) > 5)) {
+                                if (Math.abs(dy) > Math.abs(state.dx)) { state.cancelled = true; return; }
+                                state.dragging = true;
                             }
-                            if (!dragging) return;
+                            if (!state.dragging) return;
                             e.preventDefault();
-                            var base = swipeOpen ? -DELETE_W : 0;
-                            var tx = Math.min(0, Math.max(base + dx, -DELETE_W));
-                            row.style.transform = 'translateX(' + tx + 'px)';
-                            // delBtn: 100% off-right at tx=0, 0% at tx=-DELETE_W
-                            var dbPct = 100 + (tx / DELETE_W * 100);
-                            delBtn.style.transform = 'translateX(' + dbPct + '%)';
+                            var swipeOpen = state.row.style.transform.includes('translateX(-');
+                            var base = swipeOpen ? -DELETE_W_DEL : 0;
+                            var tx = Math.min(0, Math.max(base + state.dx, -DELETE_W_DEL));
+                            state.row.style.transform = 'translateX(' + tx + 'px)';
+                            var dbPct = 100 + (tx / DELETE_W_DEL * 100);
+                            state.delBtn.style.transform = 'translateX(' + dbPct + '%)';
                         }, { passive: false });
-
-                        row.addEventListener('touchend', function() {
-                            if (!dragging) return;
+                        list.addEventListener('touchend', function(e) {
+                            var state = list.__swipeState;
+                            if (!state || !state.dragging) return;
+                            var swipeOpen = state.row.style.transform.includes('translateX(-');
+                            state.row.style.transition = 'transform 0.2s ease';
+                            state.delBtn.style.transition = 'transform 0.2s ease';
                             if (swipeOpen) {
-                                if (dx > 30) { snapClose(); } else { snapOpen(); }
+                                if (state.dx > 30) { state.row.style.transform = 'translateX(0)'; state.delBtn.style.transform = 'translateX(100%)'; }
+                                else { state.row.style.transform = 'translateX(-' + DELETE_W_DEL + 'px)'; state.delBtn.style.transform = 'translateX(0)'; }
                             } else {
-                                if (dx < -36) { snapOpen(); } else { snapClose(); }
+                                if (state.dx < -36) { state.row.style.transform = 'translateX(-' + DELETE_W_DEL + 'px)'; state.delBtn.style.transform = 'translateX(0)'; }
+                                else { state.row.style.transform = 'translateX(0)'; state.delBtn.style.transform = 'translateX(100%)'; }
                             }
+                            list.__swipeState = {};
                         }, { passive: true });
-
-                        // Row click: if open → close; otherwise play
-                        row.onclick = (function(idx) {
-                            return function() {
-                                if (swipeOpen) { snapClose(); return; }
+                        list.addEventListener('click', function(e) {
+                            var delBtn = e.target.closest('[style*="background:#e53935"]');
+                            var row = delBtn ? delBtn.previousElementSibling : e.target.closest('[data-track-idx]');
+                            if (!row) return;
+                            if (delBtn) {
+                                e.stopPropagation();
+                                var idx = parseInt(row.getAttribute('data-track-idx'), 10);
+                                var wasActive = (idx === currentTrack);
+                                tracks.splice(idx, 1);
+                                if (currentTrack > idx) currentTrack--;
+                                else if (currentTrack >= tracks.length) currentTrack = Math.max(0, tracks.length - 1);
+                                if (tracks.length === 0) { audio.pause(); audio.src = ''; isPlaying = false; }
+                                else if (wasActive) { _eitiLoadTrack(currentTrack); if (isPlaying) audio.play().catch(function(){}); }
+                                if (typeof updateCount === 'function') updateCount('music', tracks.length);
+                                window.renderPlayerTrackList();
+                                if (typeof showToast === 'function') showToast('🗑 Трек удалён');
+                                if (typeof vibrate === 'function') vibrate();
+                            } else {
+                                var wrapper = row.parentElement;
+                                if (list.__swipeState.row === row || row.style.transform.includes('translateX(-')) {
+                                    row.style.transition = 'transform 0.2s ease';
+                                    row.style.transform = 'translateX(0)';
+                                    wrapper.querySelector('div:last-child').style.transition = 'transform 0.2s ease';
+                                    wrapper.querySelector('div:last-child').style.transform = 'translateX(100%)';
+                                    return;
+                                }
+                                var idx = parseInt(row.getAttribute('data-track-idx'), 10);
                                 var wasPlaying = isPlaying;
                                 currentTrack = idx;
                                 _eitiLoadTrack(idx);
@@ -7196,42 +7218,9 @@
                                     });
                                 } else { window.renderPlayerTrackList(); }
                                 vibrate();
-                            };
-                        })(i);
-
-                        // Delete button click
-                        delBtn.onclick = (function(idx) {
-                            return function(e) {
-                                e.stopPropagation();
-                                var wasActive = (idx === currentTrack);
-                                tracks.splice(idx, 1);
-                                if (currentTrack > idx) { currentTrack--; }
-                                else if (currentTrack >= tracks.length) { currentTrack = Math.max(0, tracks.length - 1); }
-                                if (tracks.length === 0) { audio.pause(); audio.src = ''; isPlaying = false; }
-                                else if (wasActive) {
-                                    _eitiLoadTrack(currentTrack);
-                                    if (isPlaying) audio.play().catch(function(){});
-                                }
-                                if (typeof updateCount === 'function') updateCount('music', tracks.length);
-                                window.renderPlayerTrackList();
-                                if (typeof showToast === 'function') showToast('🗑 Трек удалён');
-                                if (typeof vibrate === 'function') vibrate();
-                            };
-                        })(i);
-
-                        // Long press на строке плейлиста — показать полное название
-                        (function(fullName) {
-                            var _lpt = null;
-                            row.addEventListener('touchstart', function(e) {
-                                _lpt = setTimeout(function() {
-                                    if (typeof showToast === 'function') showToast('🎵 ' + fullName, 3000);
-                                    vibrate();
-                                }, 600);
-                            }, { passive: true });
-                            row.addEventListener('touchend', function() { clearTimeout(_lpt); }, { passive: true });
-                            row.addEventListener('touchmove', function() { clearTimeout(_lpt); }, { passive: true });
-                        })(name);
-                    });
+                            }
+                        });
+                    }
                     var activeRow = list.querySelector('[data-track-idx="' + currentTrack + '"]');
                     if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
                 };
@@ -7931,11 +7920,11 @@
                 
                 if (type === 'photo') {
                     const img = document.createElement('img');
-                    img.src = URL.createObjectURL(file);
+                    img.src = eitiCreateBlobURL(file);
                     item.appendChild(img);
                 } else if (type === 'video') {
                     const video = document.createElement('video');
-                    video.src = URL.createObjectURL(file);
+                    video.src = eitiCreateBlobURL(file);
                     item.appendChild(video);
                 } else {
                     item.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:40px;">📄</div>`;
@@ -7951,8 +7940,8 @@
             if (type === 'music') {
                 tracks = [file];
                 const audio = document.getElementById('audio');
-                if (audio.src && audio.src.startsWith('blob:')) { try { URL.revokeObjectURL(audio.src); } catch(e) {} }
-                audio.src = URL.createObjectURL(file);
+                if (audio.src && audio.src.startsWith('blob:')) { eitiRevokeBlobURL(audio.src); }
+                audio.src = eitiCreateBlobURL(file);
                 document.getElementById('track').textContent = file.name;
                 document.querySelector('.tab-item[data-view="player"]').click();
                 closeModal();
@@ -19221,7 +19210,7 @@ window.eitiLLMClearAll = async function() {
             q=(q||'').trim();
             if(!q){if(eitiDb)eitiLoadHistory();return;}
             if(!eitiDb)return;
-            function e(s){ return eitiEsc(s); }
+            var e = eitiEsc;
             function hl(s,q){
                 var safe=e(s);var safeQ=e(q);
                 return safe.replace(new RegExp('('+safeQ.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),
@@ -19341,8 +19330,8 @@ window.eitiLLMClearAll = async function() {
         function eitiEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
 
         function openEitiFiles(){
-            function e(s){ return eitiEsc(s); }
-            function fileIcon(name){ return eitiFileIcon(name); }
+            var e = eitiEsc;
+            var fileIcon = eitiFileIcon;
             // Отображаемое имя — убираем суффикс .txt если есть
             function dispName(name){return(name||'').replace(/\.txt$/i,'');}
 
@@ -23936,7 +23925,7 @@ window.eitiLLMClearAll = async function() {
                 list.innerHTML = '<div style="text-align:center;opacity:.5;padding:40px;font-size:14px;">Пусто — начни общаться и создавай заметки</div>';
                 return;
             }
-            function e(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+            var e = eitiEsc;
             var lastDate = '';
             items.forEach(function(item) {
                 var d = new Date(item.ts);
@@ -24487,7 +24476,7 @@ window.eitiLLMClearAll = async function() {
             if (ta && raw) ta.value = raw;
         })();
         // Интервальная проверка — каждые 30 сек, на случай если страница долго открыта
-        setInterval(remindersCheckPending, 30000);
+        window._eiti_reminders_interval = setInterval(remindersCheckPending, 30000);
         // Системный промпт: явно описываем встроенную систему напоминаний
         EITI_SYSTEM_KNOWLEDGE += '\n\n' + [
             '╔══════════════════════════════════════════════╗',
