@@ -6987,7 +6987,49 @@
                 }
             };
 
-
+            // v12.9.44: перехватываем 'player' — показываем плавающее окошко вместо таба
+            (function() {
+                var _origSV = window._eitiSwitchView;
+                window._eitiSwitchView = function(newView) {
+                    if (newView === 'player') {
+                        var mfp = document.getElementById('music-float-player');
+                        if (!mfp) { _origSV(newView); return; }
+                        var isVis = mfp.classList.contains('mfp-visible');
+                        if (isVis) {
+                            mfp.classList.remove('mfp-visible');
+                            var prev = eitiPrevView || 'chat';
+                            if (prev !== 'player') _origSV(prev);
+                        } else {
+                            mfp.classList.add('mfp-visible');
+                            for (var k in window._tabCache) window._tabCache[k].classList.remove('active');
+                            var tEl = window._tabCache['player'] || document.querySelector('.tab-item[data-view="player"]');
+                            if (tEl) tEl.classList.add('active');
+                            vibrate();
+                        }
+                        return;
+                    }
+                    var mfp = document.getElementById('music-float-player');
+                    if (mfp && mfp.classList.contains('mfp-visible')) {
+                        mfp.classList.remove('mfp-visible');
+                        var tEl = window._tabCache && window._tabCache['player'];
+                        if (tEl) tEl.classList.remove('active');
+                    }
+                    _origSV(newView);
+                };
+                window.eitiHideMusicFloat = function() {
+                    var mfp = document.getElementById('music-float-player');
+                    if (mfp) mfp.classList.remove('mfp-visible');
+                    var tEl = window._tabCache && window._tabCache['player'];
+                    if (tEl) tEl.classList.remove('active');
+                    var prev = eitiPrevView || 'chat';
+                    if (prev !== 'player') {
+                        var prevTab = window._tabCache && window._tabCache[prev];
+                        if (prevTab) prevTab.classList.add('active');
+                        var prevView = document.getElementById('view-' + prev);
+                        if (prevView && !prevView.classList.contains('active')) prevView.classList.add('active');
+                    }
+                };
+            })();
 
             document.querySelectorAll('.tab-item').forEach(function(item) {
                 item.addEventListener('click', function() {
