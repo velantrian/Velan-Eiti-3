@@ -14,7 +14,6 @@
     <meta name="msapplication-TileColor" content="#2b1e16">
     <meta name="msapplication-TileImage" content="icon-192.png">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
     <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -28,6 +27,7 @@
         window._eitiState = { dominant_topic: '', mood: 'neutral', depth: 'medium', quality: 0.7 };
         window._eitiLemma = {};                 // словарь из lemma.json (или IDB)
         window._eitiLemmaPending = null;        // ожидает подтверждения обогащения
+        window._eitiBlobURLs = [];              // отслеживание blob URLs для cleanup
         // v12.9.1 FIX P4+P8: перенесено в DOMContentLoaded — showToast определён только после парсинга всего DOM.
         // Ключ теперь динамический на основе EITI_VERSION (ранее хардкод "v118" → всегда срабатывал на новых установках).
         document.addEventListener('DOMContentLoaded', function() {
@@ -43,10 +43,10 @@
             localStorage.setItem('eiti_ai_provider', 'openrouter');
             localStorage.setItem('eiti_token_budget', '5000');
             localStorage.setItem('eiti_ai_instructions', 'Всегда отвечай в чате, пиши с emojis по смыслу');
-            localStorage.setItem('eiti_icon_mode', 'classic');
+            localStorage.setItem('eiti_icon_mode', 'emoji_classic');
 
         });
-        var EITI_BUILD_DATE = "2026-04-29T15:00"; // v12.9.39 — fix eitiRefreshBrowserVoices polling guard
+        var EITI_BUILD_DATE = "2026-04-29T15:00"; // v12.9.42 — fix eitiRefreshBrowserVoices polling guard
     </script>
     <!-- sql.js — SQLite WASM для FTS5 поиска, Attention Graph, эпистемических статусов -->
     <!-- v12.9.1 FIX: возвращён defer вместо async. async не гарантирует порядок выполнения
@@ -1490,44 +1490,6 @@
             flex-direction: column;
         }
 
-        /* v12.9.44: Music float player — плавающее окошко поверх любого таба */
-        #music-float-player {
-            display: none;
-            position: fixed;
-            top: 54px;
-            left: 8px;
-            right: 8px;
-            z-index: 1400;
-            max-height: 82vh;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            border-radius: 20px;
-            box-shadow: 0 8px 40px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,215,0,0.15);
-            transition: opacity 0.22s, transform 0.22s;
-        }
-        #music-float-player.mfp-visible { display: block; }
-        #music-float-player .player-container {
-            height: auto !important;
-            min-height: 0 !important;
-            border-radius: 20px !important;
-            position: relative;
-        }
-        #mfp-close-btn {
-            position: absolute;
-            top: 10px; right: 12px;
-            width: 28px; height: 28px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(255,255,255,0.15);
-            color: rgba(255,255,255,0.75);
-            font-size: 15px; cursor: pointer;
-            z-index: 10;
-            display: flex; align-items: center; justify-content: center;
-            -webkit-tap-highlight-color: transparent;
-            flex-shrink: 0;
-        }
-        #mfp-close-btn:active { background: rgba(255,255,255,0.28); }
-
         .album-art {
             width: 160px;
             height: 160px;
@@ -1740,22 +1702,6 @@
             font-size:20px;color:#1a0e07;flex-shrink:0;
         }
         .history-title { font-size:9px;font-weight:700;letter-spacing:1.2px;color:rgba(200,150,60,0.55);text-transform:uppercase;padding:5px 10px 3px; }
-        /* v12.9.44: luxury layout в float-плеере */
-        #music-float-player.layout-luxury { background:linear-gradient(160deg,#1a0e07 0%,#0e0804 60%,#130b04 100%); }
-        #music-float-player.layout-luxury .player-container { flex:0 0 auto;min-height:0;padding:0;display:flex;flex-direction:column;background:transparent; }
-        #music-float-player.layout-luxury .player-split { display:flex;flex:0 0 auto;gap:0;overflow:hidden;padding:6px 8px; }
-        #music-float-player.layout-luxury .player-controls { gap:6px;margin:6px 0;padding:0 2px; }
-        #music-float-player.layout-luxury .player-left { flex:0 0 58%;display:flex;flex-direction:column;gap:4px;overflow:hidden;min-width:0; }
-        #music-float-player.layout-luxury .player-right { flex:0 0 42%;display:flex;flex-direction:column;gap:0;overflow:hidden;padding-left:6px; }
-        #music-float-player.layout-luxury .album-art { width:100%;aspect-ratio:1/1;max-height:155px;border-radius:14px;background:linear-gradient(145deg,#2e1d0d,#160d04);border:1px solid rgba(180,130,50,0.4);display:flex;align-items:center;justify-content:center;font-size:44px;box-shadow:inset 0 2px 12px rgba(0,0,0,0.7),0 0 20px rgba(255,180,0,0.06);color:#c8961e;flex-shrink:0;position:relative;overflow:hidden;margin:0; }
-        #music-float-player.layout-luxury .track-name { font-size:15px;color:#f5e6c0; }
-        #music-float-player.layout-luxury .artist-name { font-size:11px;color:rgba(200,150,60,0.7); }
-        #music-float-player.layout-luxury .track-info { padding:4px 4px 0; }
-        #music-float-player.layout-luxury .progress-bar { height:5px;background:rgba(139,99,61,0.35);border-radius:3px;overflow:visible; }
-        #music-float-player.layout-luxury .progress-fill { background:linear-gradient(90deg,#c8601e,#e89020,#ffd700);border-radius:3px;position:relative; }
-        #music-float-player.layout-luxury .progress-fill::after { content:'';position:absolute;right:-4px;top:-3px;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle,#ffd700 40%,#c8961e 100%);box-shadow:0 0 6px rgba(255,215,0,0.8); }
-        #music-float-player.layout-luxury .player-btn { width:38px;height:38px;border-radius:50%;background:linear-gradient(145deg,#3a2810,#241709);border:1px solid rgba(180,130,50,0.45);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,215,0,0.12);font-size:14px;color:#c8961e;transition:transform 0.12s,box-shadow 0.12s;flex-shrink:0; }
-        #music-float-player.layout-luxury .player-btn.big { width:54px;height:54px;background:radial-gradient(circle at 38% 38%,#e8b030,#c8801e 55%,#8b5310 100%);border:1.5px solid rgba(255,215,0,0.6);box-shadow:0 0 16px rgba(255,180,0,0.35),0 4px 14px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,200,0.25);font-size:20px;color:#1a0e07;flex-shrink:0; }
         /* === FILES === */
         .files-container {
             padding: 14px 12px;
@@ -2808,14 +2754,8 @@
             </div>
             
             <!-- PLAYER (layout controlled by eitiSetPlayerLayout) -->
-            <div id="view-player" class="content-view" style="display:none!important;">
-                <!-- v12.9.44: плеер перенесён в #music-float-player (плавающее окошко) -->
-            </div>
-
-            <!-- v12.9.44: Music float player — вне системы табов, плавает поверх -->
-            <div id="music-float-player">
-                <button id="mfp-close-btn" onclick="eitiHideMusicFloat()" title="Закрыть плеер">✕</button>
-                <!-- заполняется eitiSetPlayerLayout() -->
+            <div id="view-player" class="content-view" style="overflow-y:auto;-webkit-overflow-scrolling:touch;">
+                <!-- Rendered by eitiSetPlayerLayout() on DOMContentLoaded -->
             </div>
             
             <!-- FILES -->
@@ -3715,7 +3655,7 @@
                         <div class="settings-title">💾 Как устроена Система 🛠</div>
                         <div style="padding:14px;display:flex;flex-direction:column;gap:10px;">
                             <div style="font-size:13px;opacity:0.7;line-height:1.5;">Опишите архитектуру системы в JSON. DeepSeek увидит этот блок в каждом чате как <code style="font-size:11px;background:rgba(255,255,255,0.1);padding:2px 5px;border-radius:4px;">[СИСТЕМА]</code> и сможет отвечать на вопросах о ней.</div>
-                            <textarea id="eiti-system-desc" rows="8" placeholder='{\n  "project": "VELANTRIM EITI",\n  "version": "12.9.37",\n  "memory": "DAAD FractalMemory",\n  "storage": "IndexedDB + localStorage + SQLite WASM",\n  "ai": "DeepSeek / OpenRouter / Grok Voice"\n}'
+                            <textarea id="eiti-system-desc" rows="8" placeholder='{\n  "project": "VELANTRIM EITI",\n  "version": "12.9.42",\n  "memory": "DAAD FractalMemory",\n  "storage": "IndexedDB + localStorage + SQLite WASM",\n  "ai": "DeepSeek / OpenRouter / Grok Voice"\n}'
                                 style="width:100%;padding:12px;border-radius:12px;border:1px solid var(--border-color);background:var(--panel-bg);color:var(--text-color);-webkit-text-fill-color:var(--text-color);font-size:13px;-webkit-appearance:none;resize:vertical;line-height:1.5;font-family:monospace;user-select:text;-webkit-user-select:text;"></textarea>
                             <button onclick="eitiSaveSystemDesc()"
                                     style="padding:12px;border-radius:12px;border:none;background:linear-gradient(145deg,var(--accent-color),#c9a700);color:#000;font-weight:700;font-size:15px;cursor:pointer;width:100%;">
@@ -5152,8 +5092,7 @@
         function eitiSetPlayerLayout(layout, silent) {
             layout = layout || 'classic';
             try { localStorage.setItem('eiti_player_layout', layout); } catch(e) {}
-            // v12.9.44: рендерим в float-плеер, view-player оставляем пустым
-            var vp = document.getElementById('music-float-player') || document.getElementById('view-player');
+            var vp = document.getElementById('view-player');
             if (!vp) return;
             vp.classList.remove('layout-classic', 'layout-luxury');
             vp.classList.add('layout-' + layout);
@@ -5170,10 +5109,7 @@
                 // Пауза без сброса состояния
                 if (_oldAudio && !_oldAudio.paused) _oldAudio.pause();
 
-                // v12.9.44: сохраняем кнопку закрыть перед перезаписью innerHTML
-                var _closeBtnSaved = vp.querySelector('#mfp-close-btn');
                 vp.innerHTML = _playerLayoutTemplates[layout] || _playerLayoutTemplates.classic;
-                if (_closeBtnSaved) vp.insertBefore(_closeBtnSaved, vp.firstChild);
 
                 setTimeout(function() {
                     if (typeof window._eitiBindPlayerEvents === 'function') window._eitiBindPlayerEvents();
@@ -5936,7 +5872,7 @@
                 }).then(function(r) {
                     if (!r.ok) return r.json().then(function(e){ throw new Error(e.error && e.error.message || r.status); });
                     return r.blob();
-                }).then(function(blob) { return URL.createObjectURL(blob); });
+                }).then(function(blob) { return eitiCreateBlobURL(blob); });
             }
             if (provider === 'google') {
                 var key = localStorage.getItem('eiti_tts_google_key') || '';
@@ -5959,7 +5895,7 @@
                     var bytes = atob(d.audioContent);
                     var arr = new Uint8Array(bytes.length);
                     for (var i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
-                    return URL.createObjectURL(new Blob([arr],{type:'audio/mp3'}));
+                    return eitiCreateBlobURL(new Blob([arr],{type:'audio/mp3'}));
                 });
             }
             if (provider === 'elevenlabs') {
@@ -5977,7 +5913,7 @@
                 }).then(function(r) {
                     if (!r.ok) return r.json().then(function(e){ throw new Error(e.detail && e.detail.message || r.status); });
                     return r.blob();
-                }).then(function(blob) { return URL.createObjectURL(blob); });
+                }).then(function(blob) { return eitiCreateBlobURL(blob); });
             }
             return Promise.reject(new Error('Неизвестный провайдер: ' + provider));
         }
@@ -6082,6 +6018,27 @@
             const st = getUIState();
             const next = Object.assign({}, st, patch);
             localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(next));
+        }
+
+        function eitiCreateBlobURL(blob) {
+            const url = URL.createObjectURL(blob);
+            if (!window._eitiBlobURLs.includes(url)) window._eitiBlobURLs.push(url);
+            return url;
+        }
+
+        function eitiRevokeBlobURL(url) {
+            if (url && url.startsWith('blob:')) {
+                try { URL.revokeObjectURL(url); } catch(e) {}
+                const idx = window._eitiBlobURLs.indexOf(url);
+                if (idx !== -1) window._eitiBlobURLs.splice(idx, 1);
+            }
+        }
+
+        function eitiRevokeAllBlobURLs() {
+            while (window._eitiBlobURLs.length > 0) {
+                const url = window._eitiBlobURLs.pop();
+                try { URL.revokeObjectURL(url); } catch(e) {}
+            }
         }
 
         const THEMES_VEL = [
@@ -6189,7 +6146,7 @@
             else document.body.classList.add('design-classic');
             setUIState({ design: designId });
             if (designId === 'kim3-metal') applyIconPack(getUIState().iconPack || 'kim3', true);
-            else applyIconPack(getUIState().iconPack || 'classic', true);
+            else applyIconPack(getUIState().iconPack || 'emoji_classic', true);
         }
 
         function renderThemeGrid() {
@@ -6943,7 +6900,7 @@
             // Apply saved UI profile
             const ui = getUIState();
             applyDesign(ui.design || 'classic');
-            applyIconPack(ui.iconPack || (ui.design==='kim3-metal' ? 'kim3' : 'classic'), true);
+            applyIconPack(ui.iconPack || (ui.design==='kim3-metal' ? 'kim3' : 'emoji_classic'), true);
             // Restore icon color override
             (function(){ try { var c = localStorage.getItem('eiti_icon_color'); if(c) eitiSetIconColor(c); } catch(e){} })();
             // Restore icon 3D
@@ -7135,15 +7092,8 @@
                 renderMessage(m);
             }
 
-            function escapeHtml(str){
-                return String(str)
-                    .replace(/&/g,'&amp;')
-                    .replace(/</g,'&lt;')
-                    .replace(/>/g,'&gt;')
-                    .replace(/"/g,'&quot;')
-                    .replace(/'/g,'&#039;');
-            }
-            
+            var escapeHtml = eitiEsc;
+
             if (chatLog.length === 0) addMessage('Привет! Я ваш AI-помощник. Чем могу помочь?', false);
             
             // ✅ FIX: send.onclick устанавливается в eitiPatchSendButton()
@@ -7206,88 +7156,95 @@
                     var DELETE_W = 72;
                     tracks.forEach(function(f, i) {
                         var name = f.name.replace(/\.[^/.]+$/, '');
-
-                        // Wrapper clips the delete button (overflow:hidden); delBtn is absolutely off-right
                         var wrapper = document.createElement('div');
                         wrapper.style.cssText = 'position:relative;overflow:hidden;width:100%;border-bottom:1px solid rgba(255,255,255,0.06);';
-
-                        // Track row — full width, slides left on swipe
                         var row = document.createElement('div');
                         row.setAttribute('data-track-idx', i);
                         row.style.cssText = 'width:100%;box-sizing:border-box;padding:11px 14px;font-size:14px;cursor:pointer;transition:background 0.15s;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;gap:8px;position:relative;z-index:1;'
                             + (i === currentTrack ? 'background:rgba(255,215,0,0.12);color:var(--accent-color,#ffd700);font-weight:600;' : 'color:var(--text-color,#fff);');
                         row.innerHTML = '<span style="flex-shrink:0;width:14px;text-align:center;">' + (i === currentTrack ? '▶' : '') + '</span>'
-                            + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + name + '</span>';
-
-                        // Delete button — absolutely positioned off-screen to the right, revealed by swipe
+                            + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + f.name + '">' + name + '</span>';
                         var delBtn = document.createElement('div');
-                        delBtn.style.cssText = 'position:absolute;right:0;top:0;bottom:0;width:' + DELETE_W + 'px;background:#e53935;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transform:translateX(100%);';
+                        delBtn.style.cssText = 'position:absolute;right:0;top:0;bottom:0;width:' + DELETE_W + 'px;background:#e53935;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transform:translateX(100%);z-index:2;';
                         delBtn.textContent = 'Удалить';
-
                         wrapper.appendChild(row);
                         wrapper.appendChild(delBtn);
                         list.appendChild(wrapper);
-
-                        // Swipe state
-                        var swipeOpen = false;
-                        var startX = 0, startY = 0, dx = 0;
-                        var cancelled = false, dragging = false;
-
-                        function snapOpen() {
-                            row.style.transition = 'transform 0.2s ease';
-                            row.style.transform = 'translateX(-' + DELETE_W + 'px)';
-                            delBtn.style.transition = 'transform 0.2s ease';
-                            delBtn.style.transform = 'translateX(0)';
-                            swipeOpen = true;
-                        }
-                        function snapClose() {
-                            row.style.transition = 'transform 0.2s ease';
-                            row.style.transform = 'translateX(0)';
-                            delBtn.style.transition = 'transform 0.2s ease';
-                            delBtn.style.transform = 'translateX(100%)';
-                            swipeOpen = false;
-                        }
-
-                        row.addEventListener('touchstart', function(e) {
-                            var t = e.touches[0];
-                            startX = t.clientX; startY = t.clientY;
-                            dx = 0; cancelled = false; dragging = false;
+                    });
+                    if (!list.__swipeState) {
+                        list.__swipeState = {};
+                        var DELETE_W_DEL = 72;
+                        list.addEventListener('touchstart', function(e) {
+                            var row = e.target.closest('[data-track-idx]');
+                            if (!row || !row.parentElement) return;
+                            var wrapper = row.parentElement;
+                            var delBtn = wrapper.querySelector('div:last-child');
+                            var state = { row: row, delBtn: delBtn, startX: e.touches[0].clientX, startY: e.touches[0].clientY, dx: 0, cancelled: false, dragging: false };
+                            list.__swipeState = state;
                             row.style.transition = 'none';
                             delBtn.style.transition = 'none';
                         }, { passive: true });
-
-                        row.addEventListener('touchmove', function(e) {
-                            if (cancelled) return;
+                        list.addEventListener('touchmove', function(e) {
+                            var state = list.__swipeState;
+                            if (!state || state.cancelled) return;
                             var t = e.touches[0];
-                            dx = t.clientX - startX;
-                            var dy = t.clientY - startY;
-                            if (!dragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-                                if (Math.abs(dy) > Math.abs(dx)) { cancelled = true; return; }
-                                dragging = true;
+                            state.dx = t.clientX - state.startX;
+                            var dy = t.clientY - state.startY;
+                            if (!state.dragging && (Math.abs(state.dx) > 5 || Math.abs(dy) > 5)) {
+                                if (Math.abs(dy) > Math.abs(state.dx)) { state.cancelled = true; return; }
+                                state.dragging = true;
                             }
-                            if (!dragging) return;
+                            if (!state.dragging) return;
                             e.preventDefault();
-                            var base = swipeOpen ? -DELETE_W : 0;
-                            var tx = Math.min(0, Math.max(base + dx, -DELETE_W));
-                            row.style.transform = 'translateX(' + tx + 'px)';
-                            // delBtn: 100% off-right at tx=0, 0% at tx=-DELETE_W
-                            var dbPct = 100 + (tx / DELETE_W * 100);
-                            delBtn.style.transform = 'translateX(' + dbPct + '%)';
+                            var swipeOpen = state.row.style.transform.includes('translateX(-');
+                            var base = swipeOpen ? -DELETE_W_DEL : 0;
+                            var tx = Math.min(0, Math.max(base + state.dx, -DELETE_W_DEL));
+                            state.row.style.transform = 'translateX(' + tx + 'px)';
+                            var dbPct = 100 + (tx / DELETE_W_DEL * 100);
+                            state.delBtn.style.transform = 'translateX(' + dbPct + '%)';
                         }, { passive: false });
-
-                        row.addEventListener('touchend', function() {
-                            if (!dragging) return;
+                        list.addEventListener('touchend', function(e) {
+                            var state = list.__swipeState;
+                            if (!state || !state.dragging) return;
+                            var swipeOpen = state.row.style.transform.includes('translateX(-');
+                            state.row.style.transition = 'transform 0.2s ease';
+                            state.delBtn.style.transition = 'transform 0.2s ease';
                             if (swipeOpen) {
-                                if (dx > 30) { snapClose(); } else { snapOpen(); }
+                                if (state.dx > 30) { state.row.style.transform = 'translateX(0)'; state.delBtn.style.transform = 'translateX(100%)'; }
+                                else { state.row.style.transform = 'translateX(-' + DELETE_W_DEL + 'px)'; state.delBtn.style.transform = 'translateX(0)'; }
                             } else {
-                                if (dx < -36) { snapOpen(); } else { snapClose(); }
+                                if (state.dx < -36) { state.row.style.transform = 'translateX(-' + DELETE_W_DEL + 'px)'; state.delBtn.style.transform = 'translateX(0)'; }
+                                else { state.row.style.transform = 'translateX(0)'; state.delBtn.style.transform = 'translateX(100%)'; }
                             }
+                            list.__swipeState = {};
                         }, { passive: true });
-
-                        // Row click: if open → close; otherwise play
-                        row.onclick = (function(idx) {
-                            return function() {
-                                if (swipeOpen) { snapClose(); return; }
+                        list.addEventListener('click', function(e) {
+                            var delBtn = e.target.closest('[style*="background:#e53935"]');
+                            var row = delBtn ? delBtn.previousElementSibling : e.target.closest('[data-track-idx]');
+                            if (!row) return;
+                            if (delBtn) {
+                                e.stopPropagation();
+                                var idx = parseInt(row.getAttribute('data-track-idx'), 10);
+                                var wasActive = (idx === currentTrack);
+                                tracks.splice(idx, 1);
+                                if (currentTrack > idx) currentTrack--;
+                                else if (currentTrack >= tracks.length) currentTrack = Math.max(0, tracks.length - 1);
+                                if (tracks.length === 0) { audio.pause(); audio.src = ''; isPlaying = false; }
+                                else if (wasActive) { _eitiLoadTrack(currentTrack); if (isPlaying) audio.play().catch(function(){}); }
+                                if (typeof updateCount === 'function') updateCount('music', tracks.length);
+                                window.renderPlayerTrackList();
+                                if (typeof showToast === 'function') showToast('🗑 Трек удалён');
+                                if (typeof vibrate === 'function') vibrate();
+                            } else {
+                                var wrapper = row.parentElement;
+                                if (list.__swipeState.row === row || row.style.transform.includes('translateX(-')) {
+                                    row.style.transition = 'transform 0.2s ease';
+                                    row.style.transform = 'translateX(0)';
+                                    wrapper.querySelector('div:last-child').style.transition = 'transform 0.2s ease';
+                                    wrapper.querySelector('div:last-child').style.transform = 'translateX(100%)';
+                                    return;
+                                }
+                                var idx = parseInt(row.getAttribute('data-track-idx'), 10);
                                 var wasPlaying = isPlaying;
                                 currentTrack = idx;
                                 _eitiLoadTrack(idx);
@@ -7303,42 +7260,9 @@
                                     });
                                 } else { window.renderPlayerTrackList(); }
                                 vibrate();
-                            };
-                        })(i);
-
-                        // Delete button click
-                        delBtn.onclick = (function(idx) {
-                            return function(e) {
-                                e.stopPropagation();
-                                var wasActive = (idx === currentTrack);
-                                tracks.splice(idx, 1);
-                                if (currentTrack > idx) { currentTrack--; }
-                                else if (currentTrack >= tracks.length) { currentTrack = Math.max(0, tracks.length - 1); }
-                                if (tracks.length === 0) { audio.pause(); audio.src = ''; isPlaying = false; }
-                                else if (wasActive) {
-                                    _eitiLoadTrack(currentTrack);
-                                    if (isPlaying) audio.play().catch(function(){});
-                                }
-                                if (typeof updateCount === 'function') updateCount('music', tracks.length);
-                                window.renderPlayerTrackList();
-                                if (typeof showToast === 'function') showToast('🗑 Трек удалён');
-                                if (typeof vibrate === 'function') vibrate();
-                            };
-                        })(i);
-
-                        // Long press на строке плейлиста — показать полное название
-                        (function(fullName) {
-                            var _lpt = null;
-                            row.addEventListener('touchstart', function(e) {
-                                _lpt = setTimeout(function() {
-                                    if (typeof showToast === 'function') showToast('🎵 ' + fullName, 3000);
-                                    vibrate();
-                                }, 600);
-                            }, { passive: true });
-                            row.addEventListener('touchend', function() { clearTimeout(_lpt); }, { passive: true });
-                            row.addEventListener('touchmove', function() { clearTimeout(_lpt); }, { passive: true });
-                        })(name);
-                    });
+                            }
+                        });
+                    }
                     var activeRow = list.querySelector('[data-track-idx="' + currentTrack + '"]');
                     if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
                 };
@@ -8038,11 +7962,11 @@
                 
                 if (type === 'photo') {
                     const img = document.createElement('img');
-                    img.src = URL.createObjectURL(file);
+                    img.src = eitiCreateBlobURL(file);
                     item.appendChild(img);
                 } else if (type === 'video') {
                     const video = document.createElement('video');
-                    video.src = URL.createObjectURL(file);
+                    video.src = eitiCreateBlobURL(file);
                     item.appendChild(video);
                 } else {
                     item.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:40px;">📄</div>`;
@@ -8058,8 +7982,8 @@
             if (type === 'music') {
                 tracks = [file];
                 const audio = document.getElementById('audio');
-                if (audio.src && audio.src.startsWith('blob:')) { try { URL.revokeObjectURL(audio.src); } catch(e) {} }
-                audio.src = URL.createObjectURL(file);
+                if (audio.src && audio.src.startsWith('blob:')) { eitiRevokeBlobURL(audio.src); }
+                audio.src = eitiCreateBlobURL(file);
                 document.getElementById('track').textContent = file.name;
                 document.querySelector('.tab-item[data-view="player"]').click();
                 closeModal();
@@ -19328,7 +19252,7 @@ window.eitiLLMClearAll = async function() {
             q=(q||'').trim();
             if(!q){if(eitiDb)eitiLoadHistory();return;}
             if(!eitiDb)return;
-            function e(s){ return eitiEsc(s); }
+            var e = eitiEsc;
             function hl(s,q){
                 var safe=e(s);var safeQ=e(q);
                 return safe.replace(new RegExp('('+safeQ.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),
@@ -19448,8 +19372,8 @@ window.eitiLLMClearAll = async function() {
         function eitiEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
 
         function openEitiFiles(){
-            function e(s){ return eitiEsc(s); }
-            function fileIcon(name){ return eitiFileIcon(name); }
+            var e = eitiEsc;
+            var fileIcon = eitiFileIcon;
             // Отображаемое имя — убираем суффикс .txt если есть
             function dispName(name){return(name||'').replace(/\.txt$/i,'');}
 
@@ -24043,7 +23967,7 @@ window.eitiLLMClearAll = async function() {
                 list.innerHTML = '<div style="text-align:center;opacity:.5;padding:40px;font-size:14px;">Пусто — начни общаться и создавай заметки</div>';
                 return;
             }
-            function e(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+            var e = eitiEsc;
             var lastDate = '';
             items.forEach(function(item) {
                 var d = new Date(item.ts);
@@ -24594,7 +24518,7 @@ window.eitiLLMClearAll = async function() {
             if (ta && raw) ta.value = raw;
         })();
         // Интервальная проверка — каждые 30 сек, на случай если страница долго открыта
-        setInterval(remindersCheckPending, 30000);
+        window._eiti_reminders_interval = setInterval(remindersCheckPending, 30000);
         // Системный промпт: явно описываем встроенную систему напоминаний
         EITI_SYSTEM_KNOWLEDGE += '\n\n' + [
             '╔══════════════════════════════════════════════╗',
@@ -27837,6 +27761,229 @@ window.getRelevantMemories = function(memArray, query, max) {
         return b._s - a._s || (b._m.created || 0) - (a._m.created || 0);
     }).slice(0, max).map(function(x){ return x._m; });
 };
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     🧠 VELANTRIM EITI — UNIVERSAL CONTEXT BUILDER v12.9.45b
+     Экономный RAG-контекст: только релевантное по запросу
+     Вставьте ПЕРЕД </body> в index.html
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════════
+  // 1. ТОКЕН-СЧЁТЧИК
+  // ═══════════════════════════════════════════════════════════════
+  function eitiCountTokens(text) {
+    if (!text || typeof text !== 'string') return 0;
+    text = text.trim();
+    if (!text) return 0;
+
+    const cyrillic = (text.match(/[а-яёА-ЯЁ]/g) || []).length;
+    const total = text.length;
+    const ratio = cyrillic / total;
+
+    let charsPerToken = (ratio > 0.45) ? 3.82 : (ratio > 0.20 ? 3.95 : 4.18);
+    const special = (text.match(/[^\w\sа-яёА-ЯЁa-zA-Z0-9]/g) || []).length;
+
+    return Math.max(1, Math.ceil(total / charsPerToken + special * 0.38));
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 2. БЕЗОПАСНЫЕ RAG-ФУНКЦИИ (не конфликтуют с глобальными)
+  // ═══════════════════════════════════════════════════════════════
+
+  function _ctxSearchNotes(query, limit = 6) {
+    if (!query || typeof notesLoad !== 'function') return [];
+    const q = query.toLowerCase();
+    return notesLoad()
+      .map(n => {
+        const text = ((n.title || '') + ' ' + (n.body || '')).toLowerCase();
+        const score = (text.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { ...n, score };
+      })
+      .filter(n => n.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  function _ctxSearchFiles(query, limit = 3) {
+    if (!query || typeof getAiTextStore !== 'function') return [];
+    const q = query.toLowerCase();
+    const files = getAiTextStore().files || [];
+    return files
+      .filter(f => f && f.name && !f.name.startsWith('eiti_'))
+      .map(f => {
+        const text = ((f.name || '') + ' ' + (f.content || '')).toLowerCase();
+        const score = (text.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { ...f, score };
+      })
+      .filter(f => f.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  function _ctxSearchKB(query, limit = 8) {
+    if (!query || typeof eitiKBLoad !== 'function') return [];
+    const q = query.toLowerCase();
+    return eitiKBLoad()
+      .map(f => {
+        const text = ((f.triggers || []).join(' ') + ' ' + (f.answer || '')).toLowerCase();
+        const score = (text.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { ...f, score };
+      })
+      .filter(f => f.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  function _ctxSearchL2(query, limit = 5) {
+    if (!query || typeof eitiL2Get !== 'function') return [];
+    const q = query.toLowerCase();
+    return eitiL2Get(20)
+      .map(d => {
+        const text = ((d.title || '') + ' ' + (d.digest || '')).toLowerCase();
+        const score = (text.match(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        return { ...d, score };
+      })
+      .filter(d => d.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 3. СВОДКА «ЧТО НОВОГО»
+  // ═══════════════════════════════════════════════════════════════
+  function buildWhatsNewSummary(sinceTs) {
+    if (!sinceTs) return '';
+    var lines = [];
+    try {
+      var newNotes = notesLoad().filter(function(n) { return (n.updated||0) > sinceTs || (n.created||0) > sinceTs; });
+      if (newNotes.length) lines.push('• Создано/обновлено заметок: ' + newNotes.length);
+      var newFiles = (getAiTextStore().files||[]).filter(function(f) { return f.updated > sinceTs && !f.name.startsWith('eiti_'); });
+      if (newFiles.length) lines.push('• Новых/изменённых файлов: ' + newFiles.length);
+      var newKb = eitiKBLoad().filter(function(f) { return f.ts > sinceTs; });
+      if (newKb.length) lines.push('• Добавлено KB-фактов: ' + newKb.length);
+      var lastChat = (window._idbChatsCache||[]).slice(0,1)[0];
+      if (lastChat) lines.push('• Последний чат: ' + (lastChat.title||'') + ' (' + new Date(lastChat.updated).toLocaleDateString('ru') + ')');
+    } catch(e) {}
+    return lines.join('\n');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 4. ГЛАВНЫЙ КОНСТРУКТОР КОНТЕКСТА
+  // ═══════════════════════════════════════════════════════════════
+  window.eitiBuildUniversalContext = function(userQuery, options = {}) {
+    var parts = [];
+
+    // 1. Профиль
+    if (typeof eitiProfileToSystemText === 'function') {
+      var profile = eitiProfileToSystemText();
+      if (profile) parts.push(profile);
+    }
+
+    // 2. Оглавление (индексный файл) — всегда
+    if (typeof buildOrGetIndexFile === 'function') {
+      var index = buildOrGetIndexFile();
+      if (index) parts.push(index);
+    }
+
+    // 3. Только при пустом запросе — сводка «Что нового»
+    if (!userQuery || userQuery.length < 5) {
+      var lastSeen = parseInt(localStorage.getItem('eiti_last_seen_ts') || '0');
+      var summary = buildWhatsNewSummary(lastSeen);
+      if (summary) parts.push('\n=== ⚡ ЧТО НОВОГО С ПРОШЛОГО РАЗА ===\n' + summary);
+    }
+
+    // 4. RAG — только релевантное
+    if (userQuery && userQuery.length > 3) {
+      try {
+        var notes = _ctxSearchNotes(userQuery, 6);
+        if (notes.length) {
+          parts.push('\n=== РЕЛЕВАНТНЫЕ ЗАМЕТКИ ===');
+          notes.forEach(n => parts.push('📝 ' + (n.title || 'Без названия') + '\n' + (n.body || '').slice(0, 900)));
+        }
+
+        var files = _ctxSearchFiles(userQuery, 3);
+        if (files.length) {
+          parts.push('\n=== РЕЛЕВАНТНЫЕ ФАЙЛЫ ===');
+          files.forEach(f => {
+            parts.push('📄 ' + f.name + '\n' + (f.content || '').slice(0, 1100));
+          });
+        }
+
+        var kb = _ctxSearchKB(userQuery, 8);
+        if (kb.length) {
+          parts.push('\n=== РЕЛЕВАНТНЫЕ ФАКТЫ KB ===');
+          kb.forEach(f => parts.push('· [' + (f.category || 'общее') + '] ' + (f.triggers || []).join(', ') + ': ' + (f.answer || '')));
+        }
+
+        var l2 = _ctxSearchL2(userQuery, 5);
+        if (l2.length) {
+          parts.push('\n=== РЕЛЕВАНТНЫЕ ПРОШЛЫЕ СЕССИИ (L2) ===');
+          l2.forEach(d => {
+            var ago = Math.round((Date.now() - (d.ts || 0)) / 60000);
+            var agoStr = ago < 60 ? ago + ' мин назад' : Math.round(ago / 60) + ' ч назад';
+            parts.push('[' + (d.title || 'Чат') + ' · ' + agoStr + ']\n' + (d.digest || '').slice(0, 600));
+          });
+        }
+      } catch(e) {}
+    }
+
+    // 5. Текущий чат (всегда)
+    if (typeof chatLog !== 'undefined' && chatLog.length) {
+      var recent = chatLog.slice(-12).map(function(m) {
+        return (m.role === 'user' ? '👤' : '🤖') + ': ' + (m.text || '').slice(0, 380);
+      }).join('\n');
+      parts.push('\n=== ТЕКУЩИЙ ЧАТ ===\n' + recent);
+    }
+
+    var context = parts.join('\n');
+
+    // 6. Защита от переполнения
+    if (eitiCountTokens(context) > 22000) {
+      context = context.slice(0, 92000); // жёсткая обрезка ~22k токенов
+    }
+
+    return context;
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // 5. КНОПКА СБРОСА ПАМЯТИ
+  // ═══════════════════════════════════════════════════════════════
+  window.eitiResetAllMemory = function() {
+    if (!confirm('⚠️ ВНИМАНИЕ!\n\nЭто действие безвозвратно удалит:\n• Все чаты и историю\n• Все заметки\n• Все файлы\n• Настройки и API-ключи\n\nПродолжить?')) return;
+
+    try {
+      localStorage.clear();
+      var dbName = (typeof eitiDb !== 'undefined' && eitiDb) ? eitiDb.name : 'eiti_v4';
+      var req = indexedDB.deleteDatabase(dbName);
+      req.onsuccess = function() {
+        alert('✅ Вся память успешно очищена.\nПриложение будет перезагружено.');
+        location.reload();
+      };
+      req.onerror = function() {
+        alert('⚠️ Ошибка при очистке. Перезагрузите страницу вручную.');
+        location.reload();
+      };
+    } catch (e) {
+      alert('Ошибка сброса: ' + e.message);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // 6. АВТООТМЕТКА ВРЕМЕНИ
+  // ═══════════════════════════════════════════════════════════════
+  window.eitiMarkLastSeen = function() {
+    localStorage.setItem('eiti_last_seen_ts', Date.now());
+  };
+
+  // Выполняем при загрузке
+  eitiMarkLastSeen();
+
+  console.log('✅ Universal Context v12.9.45b активирован.');
+})();
 </script>
 </body>
 </html>
